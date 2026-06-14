@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import MapCanvas from "../map/MapCanvas";
 import MainChat from "../MainChat";
 import Sidebar from "../Sidebar";
 import ConversationView from "../chat/ConversationView";
+import { useSpatialQuery } from "../../hooks/useSpatialQuery";
 
 interface Conversation {
   id: string;
@@ -39,7 +40,22 @@ const AppLayout = ({
   onOpenSettings,
   onOpenHelp,
 }: AppLayoutProps) => {
-  const [drawnGeometry, setDrawnGeometry] = useState<GeoJSON.Geometry | null>(null);
+  const {
+    drawnGeometry,
+    highlightedFeatures,
+    isQuerying,
+    runSpatialQuery,
+    clearSpatialQuery,
+    setDrawnGeometry,
+  } = useSpatialQuery();
+
+  useEffect(() => {
+    if (drawnGeometry) {
+      runSpatialQuery(drawnGeometry, { "Backend Received Polygon": true });
+    } else {
+      clearSpatialQuery();
+    }
+  }, [drawnGeometry]);
 
   const isDrawMode = drawnGeometry !== null;
   const hasActiveChat = activeConversation !== null && activeConversation.messages.length > 0;
@@ -51,14 +67,16 @@ const AppLayout = ({
       <main className="relative flex-1 rounded-[28px] overflow-hidden border border-black/5 shadow-sm bg-[#f8f6f1]">
         <MapCanvas
           onDrawGeometry={setDrawnGeometry}
-          highlightedFeatures={null}
+          highlightedFeatures={highlightedFeatures}
           isDrawMode={isDrawMode}
           setIsDrawMode={() => {}}
         />
 
         {!hasActiveChat && !isDrawMode && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
-            <MainChat onPromptClick={onPromptClick} onSendMessage={onSendMessage} />
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px] pointer-events-none">
+            <div className="pointer-events-auto">
+              <MainChat onPromptClick={onPromptClick} onSendMessage={onSendMessage} />
+            </div>
           </div>
         )}
       </main>

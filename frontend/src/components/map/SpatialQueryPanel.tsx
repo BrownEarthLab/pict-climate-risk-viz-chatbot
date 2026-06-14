@@ -57,9 +57,14 @@ const SpatialQueryPanel = ({ highlightedFeatures, layerDisplayNames = {} }: Spat
             return (
               <li key={layerName} className="text-sm">
                 <strong>{displayName}</strong> ({features.length} features)
+                {features[0]?.properties?.description && (
+                  <p className="mt-1 text-xs text-gray-600 leading-relaxed">
+                    {features[0].properties.description}
+                  </p>
+                )}
                 <button
                   onClick={() => handleDownload(layerName)}
-                  className="ml-2 rounded bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+                  className="mt-1 rounded bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
                 >
                   Download GeoJSON
                 </button>
