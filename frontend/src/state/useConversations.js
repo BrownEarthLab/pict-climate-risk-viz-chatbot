@@ -70,6 +70,17 @@ function isEmptyConversation(chat) {
   return chat && chat.messages.length === 0;
 }
 
+function areMockResponsesEnabled() {
+  try {
+    const saved = localStorage.getItem("pict-climate-risk-settings");
+    if (!saved) return true;
+    const settings = JSON.parse(saved);
+    return settings.mockEnabled !== false;
+  } catch {
+    return true;
+  }
+}
+
 function createMockResponseContent(userText) {
   const lower = userText.toLowerCase();
 
@@ -107,6 +118,7 @@ export function useConversations() {
   }, [conversations, activeConversationId]);
 
   function finishMockResponse(assistantMessageId, userText) {
+  const mockEnabled = areMockResponsesEnabled();
   setTimeout(() => {
     setConversations((current) =>
       sortConversationsByRecent(
@@ -124,7 +136,7 @@ export function useConversations() {
 
               return {
                 ...message,
-                content: createMockResponseContent(userText),
+                content: mockEnabled ? createMockResponseContent(userText) : "Mock responses are disabled. Toggle them on in Settings to see placeholder responses. The backend is not yet connected.",
                 isLoading: false,
               };
             }),
