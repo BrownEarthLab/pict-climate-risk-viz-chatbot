@@ -26,6 +26,8 @@ const DrawControls = ({ map, onDrawGeometry }: DrawControlsProps) => {
         displayControlsDefault: false,
         controls: { polygon: true, point: true, line_string: true, trash: true },
       });
+      (window as any).__mapboxDraw = draw.current;
+      (window as any).__mapboxMap = map;
       map.addControl(draw.current, "top-left");
       map.on("draw.create", handleDrawChange);
       map.on("draw.update", handleDrawChange);
@@ -34,6 +36,8 @@ const DrawControls = ({ map, onDrawGeometry }: DrawControlsProps) => {
       });
     }
     return () => {
+      delete (window as any).__mapboxDraw;
+      delete (window as any).__mapboxMap;
       if (map && draw.current) {
         map.removeControl(draw.current);
         map.off("draw.create", handleDrawChange);
