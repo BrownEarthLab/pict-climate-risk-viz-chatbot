@@ -1,9 +1,9 @@
 import { useState } from "react";
+import AppLayout from "../components/layout/AppLayout";
 import Sidebar from "../components/Sidebar";
-import MainChat from "../components/MainChat";
 import SettingsModal from "../components/SettingsModal";
-import { useConversations } from "../state/useConversations";
 import HelpModal from "../components/HelpModal";
+import { useConversations } from "../state/useConversations";
 
 function ChatPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -51,26 +51,19 @@ function ChatPage() {
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-2rem)] gap-4">
-        {/* Desktop sidebar */}
-        <Sidebar
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onNewChat={handleNewChat}
-          onClearAll={clearConversations}
-          onSelectConversation={handleSelectConversation}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenHelp={() => setIsHelpOpen(true)}
-          onDeleteConversation={deleteConversation}
-          className="hidden lg:flex"
-        />
-
-        <MainChat
-          activeConversation={activeConversation}
-          onPromptClick={startConversationFromPrompt}
-          onSendMessage={sendMessage}
-        />
-      </div>
+      <AppLayout
+        conversations={conversations}
+        activeConversation={activeConversation}
+        activeConversationId={activeConversationId}
+        onNewChat={handleNewChat}
+        onPromptClick={startConversationFromPrompt}
+        onSendMessage={sendMessage}
+        onDeleteConversation={deleteConversation}
+        onClearAll={clearConversations}
+        onSelectConversation={handleSelectConversation}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHelp={() => setIsHelpOpen(true)}
+      />
 
       {/* Mobile slide-over sidebar */}
       {isMobileSidebarOpen && (
@@ -80,7 +73,6 @@ function ChatPage() {
             className="absolute inset-0 bg-black/25"
             aria-label="Close sidebar overlay"
           />
-
           <div className="absolute left-3 top-3 bottom-3">
             <Sidebar
               conversations={conversations}
@@ -106,7 +98,7 @@ function ChatPage() {
       {isSettingsOpen && (
         <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
-      
+
       {isHelpOpen && (
         <HelpModal onClose={() => setIsHelpOpen(false)} />
       )}

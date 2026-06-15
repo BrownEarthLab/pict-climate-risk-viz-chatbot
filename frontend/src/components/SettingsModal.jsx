@@ -7,6 +7,7 @@ const defaultSettings = {
   units: "Metric",
   defaultRegion: "Pacific Islands",
   showUncertaintyNotes: true,
+  mockEnabled: true,
   showPrototypeWarnings: true,
 };
 
@@ -118,6 +119,13 @@ function SettingsModal({ onClose }) {
 
           {activeTab === "Prototype" && (
             <div className="space-y-4">
+              <SettingToggle
+                label="Mock data responses"
+                description="Show placeholder responses instead of waiting for backend connection."
+                checked={settings.mockEnabled}
+                onChange={(value) => updateSetting("mockEnabled", value)}
+              />
+
               <SettingToggle
                 label="Show prototype warnings"
                 description="Remind users that chatbot responses are mocked for now."
