@@ -7,7 +7,7 @@ export function useSpatialQuery() {
   const [queryResults, setQueryResults] = useState<GeoJSON.Feature[] | null>(null);
   const [isQuerying, setIsQuerying] = useState(false);
 
-  const runSpatialQuery = useCallback(async (geometry: GeoJSON.Geometry, activeLayers: Record<string, boolean>) => {
+  const runSpatialQuery = useCallback(async (geometry: GeoJSON.Geometry, activeLayers: Record<string, boolean>, analysisType?: string) => {
     setDrawnGeometry(geometry);
     if (!geometry) {
       setHighlightedFeatures(null);
@@ -23,7 +23,11 @@ export function useSpatialQuery() {
       const res = await fetch(getApiUrl("/api/spatial-query"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ drawn_boundary: geometry, target_layers: selectedLayers }),
+        body: JSON.stringify({ 
+          drawn_boundary: geometry, 
+          target_layers: selectedLayers,
+          analysis_type: analysisType
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();

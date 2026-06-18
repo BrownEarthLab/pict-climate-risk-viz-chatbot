@@ -58,9 +58,11 @@ const SpatialQueryPanel = ({ highlightedFeatures, layerDisplayNames = {} }: Spat
               <li key={layerName} className="text-sm">
                 <strong>{displayName}</strong> ({features.length} features)
                 {features[0]?.properties?.description && (
-                  <p className="mt-1 text-xs text-gray-600 leading-relaxed">
-                    {features[0].properties.description}
-                  </p>
+                  <div className="mt-1.5 text-xs text-neutral-600 leading-relaxed space-y-0.5">
+                    {features[0].properties.description.split("\n").map((line: string, idx: number) => (
+                      <p key={idx}>{line}</p>
+                    ))}
+                  </div>
                 )}
                 <button
                   onClick={() => handleDownload(layerName)}

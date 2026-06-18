@@ -67,6 +67,8 @@ const AppLayout = ({
       <main className="relative flex-1 rounded-[28px] overflow-hidden border border-black/5 shadow-sm bg-[#f8f6f1]">
         <MapCanvas
           onDrawGeometry={setDrawnGeometry}
+          drawnGeometry={drawnGeometry}
+          runSpatialQuery={runSpatialQuery}
           highlightedFeatures={highlightedFeatures}
           isDrawMode={isDrawMode}
           setIsDrawMode={() => {}}

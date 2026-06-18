@@ -72,14 +72,54 @@ const FeatureHighlighter = ({ mapboxMap, highlightedFeatures }: FeatureHighlight
       }
 
       if (hasPolygons) {
-        addLayerIfMissing(highlightLayerPolygonId, "fill", highlightSourceId, ["==", "$type", "Polygon"], {
-          "fill-color": "#00FFFF",
-          "fill-opacity": 0.5,
-        });
+        // Find if features belong to TAS or WBT
+        const firstAnalyticalFeature = highlightedFeatures.find(f => f.properties?.layer_name);
+        const layerName = firstAnalyticalFeature?.properties?.layer_name;
+
+        let fillColor: any = "#00FFFF";
+        if (layerName === "Near-Surface Air Temp (TAS)") {
+          fillColor = [
+            "interpolate",
+            ["linear"],
+            ["get", "temp_c"],
+            20, "#3b82f6",
+            25, "#eab308",
+            30, "#ef4444"
+          ];
+        } else if (layerName === "Annual Mean Wet-Bulb (WBT)") {
+          fillColor = [
+            "interpolate",
+            ["linear"],
+            ["get", "wet_bulb_c"],
+            15, "#10b981",
+            20, "#f59e0b",
+            24, "#ef4444",
+            27, "#d946ef"
+          ];
+        }
+
+        const paintConfig = {
+          "fill-color": fillColor,
+          "fill-opacity": 0.6,
+        };
+
+        addLayerIfMissing(highlightLayerPolygonId, "fill", highlightSourceId, ["==", "$type", "Polygon"], paintConfig);
+        
+        // Always force update the paint property if the layer already exists
+        if (mapboxMap.getLayer(highlightLayerPolygonId)) {
+          mapboxMap.setPaintProperty(highlightLayerPolygonId, "fill-color", fillColor);
+        }
+
         addLayerIfMissing(highlightLayerPolygonOutlineId, "line", highlightSourceId, ["==", "$type", "Polygon"], {
-          "line-color": "#FFFFFF",
-          "line-width": 2,
+          "line-color": "rgba(255, 255, 255, 0.35)",
+          "line-width": 0.75,
         });
+        
+        // Always force update the paint properties if the layer already exists
+        if (mapboxMap.getLayer(highlightLayerPolygonOutlineId)) {
+          mapboxMap.setPaintProperty(highlightLayerPolygonOutlineId, "line-color", "rgba(255, 255, 255, 0.35)");
+          mapboxMap.setPaintProperty(highlightLayerPolygonOutlineId, "line-width", 0.75);
+        }
       } else {
         removeLayer(highlightLayerPolygonId, highlightLayerPolygonOutlineId);
       }
