@@ -41,10 +41,10 @@ def point_in_polygon(x, y, poly):
 
 def netcdf_to_geojson():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    nc_path = os.path.join(script_dir, "pacific_islands_tas_historical.nc")
+    nc_path = os.path.join(script_dir, "..", "pacific_islands_tas_historical.nc")
     
     # Path to frontend public directory
-    geojson_out = os.path.join(script_dir, "..", "pict-climate-risk-viz-chatbot", "frontend", "public", "pacific_islands_tas.geojson")
+    geojson_out = os.path.join(script_dir, "..", "..", "frontend", "public", "pacific_islands_tas.geojson")
     os.makedirs(os.path.dirname(geojson_out), exist_ok=True)
     
     print(f"Reading NetCDF: {nc_path}")

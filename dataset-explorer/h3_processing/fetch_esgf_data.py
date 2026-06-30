@@ -84,7 +84,7 @@ def extract_endpoints(doc):
 
 def download_and_slice_http(http_url, file_name, lat_slice, lon_slice, output_path):
     """Downloads the full global NetCDF file, caches it locally, and slices it."""
-    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache")
     os.makedirs(cache_dir, exist_ok=True)
     cached_file_path = os.path.join(cache_dir, file_name)
     
@@ -143,7 +143,7 @@ def main():
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_filename = "pacific_islands_tas_historical.nc"
-    output_path = os.path.join(script_dir, output_filename)
+    output_path = os.path.join(script_dir, "..", output_filename)
     
     try:
         docs = search_esgf_files()
