@@ -151,4 +151,6 @@ __pycache__/
 # dataset cache and geojson files
 cache/
 *.geojson
+*.nc
+*.csv
 *.DS_Store
