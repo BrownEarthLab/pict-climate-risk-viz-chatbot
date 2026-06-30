@@ -1,0 +1,208 @@
+[
+  {
+    "function_name": "sample_raster_at_points",
+    "documentation": "Samples the pixel values of a raster layer at the locations of a point vector layer and appends the values as a new column in the points attribute table.",
+    "inputs": {
+      "points_layer": "vector_point",
+      "raster_layer": "raster",
+      "output_column": "string"
+    },
+    "outputs": [
+      "points_layer_with_sampled_values"
+    ],
+    "use_cases": [
+      "hospital heat exposure",
+      "school flood exposure",
+      "village rainfall risk",
+      "well water contamination"
+    ],
+    "example_user_questions": [
+      "What is the projected wet-bulb temperature value at each hospital location in Tuvalu?",
+      "Can we extract the coastal inundation depth for all water supply wells in Tarawa?"
+    ]
+  },
+  {
+    "function_name": "zonal_statistics",
+    "documentation": "Computes summary statistics (such as mean, median, min, max, std_dev) of a raster layer within the polygons of a vector boundary layer.",
+    "inputs": {
+      "raster_layer": "raster",
+      "boundary_layer": "vector_polygon",
+      "statistics": "list_of_strings"
+    },
+    "outputs": [
+      "boundary_layer_with_stats"
+    ],
+    "use_cases": [
+      "average temperature per province",
+      "mean heatwave days per island",
+      "rainfall variability per catchment",
+      "health risk index aggregation"
+    ],
+    "example_user_questions": [
+      "What is the average projected temperature increase for each island in Kiribati?",
+      "How does the annual mean wet-bulb temperature vary across districts in Fiji?"
+    ]
+  },
+  {
+    "function_name": "clip_raster_by_mask",
+    "documentation": "Clips (crops) a raster layer to the spatial extent of a vector polygon layer.",
+    "inputs": {
+      "raster_layer": "raster",
+      "mask_layer": "vector_polygon"
+    },
+    "outputs": [
+      "clipped_raster"
+    ],
+    "use_cases": [
+      "crop global climate model to Kiribati EEZ",
+      "subset regional wet-bulb raster to Tuvalu",
+      "clip temperature grid to Viti Levu boundary"
+    ],
+    "example_user_questions": [
+      "Can we crop the global CMIP6 temperature projections to just show the Fiji island group?",
+      "Filter the regional wet-bulb temperature map to Tuvalu's bounding box."
+    ]
+  },
+  {
+    "function_name": "spatial_intersection",
+    "documentation": "Intersects two vector layers to create a new vector layer containing only the overlapping geometries and combined attributes.",
+    "inputs": {
+      "layer_a": "vector",
+      "layer_b": "vector"
+    },
+    "outputs": [
+      "intersected_layer"
+    ],
+    "use_cases": [
+      "find exposed buildings in flood zones",
+      "identify settlements inside heat risk polygons",
+      "determine freshwater lenses intersecting coastal inundation zones"
+    ],
+    "example_user_questions": [
+      "Which health facilities in Kiribati are located in areas of high heat risk?",
+      "How many settlements in Tuvalu overlap with the projected coastal flood hazard zones?"
+    ]
+  },
+  {
+    "function_name": "buffer_geometry",
+    "documentation": "Generates a buffer polygon around geometries (points, lines, or polygons) at a specified distance.",
+    "inputs": {
+      "input_layer": "vector",
+      "distance": "numeric",
+      "unit": "string"
+    },
+    "outputs": [
+      "buffered_layer"
+    ],
+    "use_cases": [
+      "storm surge impact zones around deposit points",
+      "distance from cyclone tracks",
+      "proximity buffer around clinics"
+    ],
+    "example_user_questions": [
+      "Create a 5km storm surge warning zone around historic paleotempest sediment sites in Kiribati.",
+      "Show the areas within 10km of the projected cyclone trajectory."
+    ]
+  },
+  {
+    "function_name": "raster_calculator",
+    "documentation": "Performs pixel-wise mathematical operations on one or more raster layers using a formula expression.",
+    "inputs": {
+      "rasters": "list_of_rasters",
+      "formula": "string"
+    },
+    "outputs": [
+      "output_raster"
+    ],
+    "use_cases": [
+      "compute temperature difference (future minus baseline)",
+      "calculate joint hazard index",
+      "ratio of precipitation change"
+    ],
+    "example_user_questions": [
+      "What is the difference in annual heatwave days between the 2.0°C and 1.5°C global warming levels?",
+      "Subtract the historical baseline temperature from the mid-century projection to map the temperature anomaly."
+    ]
+  },
+  {
+    "function_name": "reclassify_raster",
+    "documentation": "Reclassifies raster pixel values based on defined ranges or thresholds (e.g. converting continuous values to discrete risk classes).",
+    "inputs": {
+      "raster_layer": "raster",
+      "thresholds": "list_of_floats",
+      "classes": "list_of_integers"
+    },
+    "outputs": [
+      "classified_raster"
+    ],
+    "use_cases": [
+      "define high heat risk zone (Tmax > 35°C)",
+      "classify flood hazard levels (low/medium/high)",
+      "map safety thresholds"
+    ],
+    "example_user_questions": [
+      "Classify areas where the annual maximum temperature exceeds 35°C as high risk.",
+      "Categorize the wet-bulb temperature raster into hazard zones based on safety limits."
+    ]
+  },
+  {
+    "function_name": "select_features_by_attribute",
+    "documentation": "Filters features from a vector layer based on an attribute query expression.",
+    "inputs": {
+      "vector_layer": "vector",
+      "expression": "string"
+    },
+    "outputs": [
+      "selected_vector_layer"
+    ],
+    "use_cases": [
+      "filter islands belonging to Kiribati",
+      "select clinics with high catchment populations",
+      "extract low-lying atolls"
+    ],
+    "example_user_questions": [
+      "Filter the administrative boundaries layer to only show the Gilbert Islands in Kiribati.",
+      "Select health clinics in Fiji that serve populations greater than 5,000."
+    ]
+  },
+  {
+    "function_name": "spatial_join",
+    "documentation": "Appends attributes from a join layer to a target layer based on their spatial relationship (intersects, contains, within).",
+    "inputs": {
+      "target_layer": "vector",
+      "join_layer": "vector",
+      "predicate": "string"
+    },
+    "outputs": [
+      "joined_vector_layer"
+    ],
+    "use_cases": [
+      "count hospitals in heat risk zones",
+      "aggregate population counts per atoll",
+      "link water lenses to exposed settlements"
+    ],
+    "example_user_questions": [
+      "Count how many power substations and clinics are situated within the compound flood risk zone.",
+      "Assign the heatwave risk score of each atoll to the villages located on them."
+    ]
+  },
+  {
+    "function_name": "raster_to_polygon",
+    "documentation": "Vectorizes contiguous groups of raster pixels with identical values into polygon features.",
+    "inputs": {
+      "raster_layer": "raster"
+    },
+    "outputs": [
+      "vector_polygon_layer"
+    ],
+    "use_cases": [
+      "convert high heat risk cells to polygons",
+      "generate shapefiles of flood zones",
+      "extract raster-based heatwave boundaries"
+    ],
+    "example_user_questions": [
+      "Convert the reclassified high-temperature pixels into polygon areas so we can run point overlays.",
+      "Generate boundary shapefiles for the areas projected to be inundated by sea level rise."
+    ]
+  }
+]

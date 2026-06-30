@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GISToolCatalog",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "function_name": {
+        "type": "string",
+        "description": "Unique identifier of the GIS tool function matching its implementation name."
+      },
+      "documentation": {
+        "type": "string",
+        "description": "Clear explanation of what the GIS function does, its behavior, and computational logic."
+      },
+      "inputs": {
+        "type": "object",
+        "description": "Map of input argument names to their expected data types (e.g. raster, vector_point, vector_polygon, string, numeric).",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "outputs": {
+        "type": "array",
+        "description": "List of return variables/layers produced by the function.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "use_cases": {
+        "type": "array",
+        "description": "Scenarios or high-level goals where this function is relevant.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "example_user_questions": {
+        "type": "array",
+        "description": "Sample queries or questions from policy makers that map to this function.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "function_name",
+      "documentation",
+      "inputs",
+      "outputs",
+      "use_cases",
+      "example_user_questions"
+    ],
+    "additionalProperties": false
+  }
+}
