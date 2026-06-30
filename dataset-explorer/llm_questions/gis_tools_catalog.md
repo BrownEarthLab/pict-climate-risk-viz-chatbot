@@ -1,7 +1,7 @@
 # GIS Tools Catalog
 
 > [!NOTE]
-> This document is dynamically generated from the source-of-truth [gis_tools_catalog.json](file:///workspaces/global-sandbox/projects/pict-climate-risk-viz-chatbot/dataset-explorer/llm_questions/gis_tools_catalog.json).
+> This document is dynamically generated from the source-of-truth [gis_tools_catalog.json](./gis_tools_catalog.json).
 > Run `python3 generate_markdown_catalog.py` to synchronize any updates.
 
 ## Quick Reference Table

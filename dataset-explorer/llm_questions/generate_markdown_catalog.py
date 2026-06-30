@@ -18,7 +18,7 @@ def main():
     markdown_content.append("# GIS Tools Catalog")
     markdown_content.append("")
     markdown_content.append("> [!NOTE]")
-    markdown_content.append("> This document is dynamically generated from the source-of-truth [gis_tools_catalog.json](file://" + json_path + ").")
+    markdown_content.append("> This document is dynamically generated from the source-of-truth [gis_tools_catalog.json](./gis_tools_catalog.json).")
     markdown_content.append("> Run `python3 generate_markdown_catalog.py` to synchronize any updates.")
     markdown_content.append("")
     markdown_content.append("## Quick Reference Table")
