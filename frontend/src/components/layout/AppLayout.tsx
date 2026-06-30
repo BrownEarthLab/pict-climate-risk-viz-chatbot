@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import MapCanvas from "../map/MapCanvas";
 import MainChat from "../MainChat";
 import Sidebar from "../Sidebar";
 import ConversationView from "../chat/ConversationView";
+import WorkflowViewer from "../chat/WorkflowViewer";
 import { useSpatialQuery } from "../../hooks/useSpatialQuery";
 
 interface Conversation {
@@ -40,6 +41,8 @@ const AppLayout = ({
   onOpenSettings,
   onOpenHelp,
 }: AppLayoutProps) => {
+  const [activeWorkflow, setActiveWorkflow] = useState<any>(null);
+
   const {
     drawnGeometry,
     highlightedFeatures,
@@ -47,7 +50,21 @@ const AppLayout = ({
     runSpatialQuery,
     clearSpatialQuery,
     setDrawnGeometry,
+    setHighlightedFeatures,
   } = useSpatialQuery();
+
+  useEffect(() => {
+    const handleWorkflowComplete = (e: CustomEvent) => {
+      const { features } = e.detail;
+      if (features) {
+        setHighlightedFeatures(features);
+      }
+    };
+    window.addEventListener("workflow-complete" as any, handleWorkflowComplete);
+    return () => {
+      window.removeEventListener("workflow-complete" as any, handleWorkflowComplete);
+    };
+  }, [setHighlightedFeatures]);
 
   useEffect(() => {
     if (drawnGeometry) {
@@ -73,6 +90,23 @@ const AppLayout = ({
           isDrawMode={isDrawMode}
           setIsDrawMode={() => {}}
         />
+
+        {activeWorkflow && (
+          <div className="absolute top-4 right-4 z-30 w-[340px] max-h-[calc(100%-2rem)] overflow-y-auto rounded-3xl bg-white/95 p-4 shadow-xl border border-black/5 backdrop-blur-md">
+            <div className="flex items-center justify-between mb-3 border-b border-neutral-100 pb-2">
+              <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                Active GIS Workflow
+              </span>
+              <button
+                onClick={() => setActiveWorkflow(null)}
+                className="text-xs font-bold text-neutral-400 hover:text-neutral-900 cursor-pointer"
+              >
+                Close ×
+              </button>
+            </div>
+            <WorkflowViewer workflow={activeWorkflow} />
+          </div>
+        )}
 
         {!hasActiveChat && !isDrawMode && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px] pointer-events-none">
@@ -111,6 +145,7 @@ const AppLayout = ({
               <ConversationView
                 messages={activeConversation.messages}
                 onSendMessage={onSendMessage}
+                onViewWorkflowOnMap={setActiveWorkflow}
               />
             </div>
           </div>

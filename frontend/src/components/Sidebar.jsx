@@ -21,7 +21,7 @@ function getConversationPreview(chat) {
   }
 
   if (latestMessage.isLoading) {
-    return "Climate A.I. is thinking...";
+    return "Mapping tool intent...";
   }
 
   const prefix = latestMessage.role === "user" ? "You: " : "AI: ";
@@ -79,7 +79,7 @@ function Sidebar({
 
         <div>
           <h1 className="text-sm font-semibold text-neutral-900">
-            Climate Risk A.I.
+            Climate Risk Router
           </h1>
           <p className="text-xs text-neutral-400">
             PICT uncertainty chatbot

@@ -141,6 +141,27 @@ const MapCanvas = ({
     };
   }, [mapboxMap, drawnGeometry, runSpatialQuery]);
 
+  useEffect(() => {
+    if (!mapboxMap) return;
+
+    const handleWorkflowComplete = (e: CustomEvent) => {
+      const { center, zoom } = e.detail;
+      if (center) {
+        mapboxMap.flyTo({
+          center: center as [number, number],
+          zoom: zoom || 8,
+          essential: true,
+          duration: 2500,
+        });
+      }
+    };
+
+    window.addEventListener("workflow-complete" as any, handleWorkflowComplete);
+    return () => {
+      window.removeEventListener("workflow-complete" as any, handleWorkflowComplete);
+    };
+  }, [mapboxMap]);
+
   return (
     <div className="absolute inset-0">
       <div ref={mapContainerRef} className="h-full w-full" />

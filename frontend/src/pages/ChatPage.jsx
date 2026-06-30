@@ -45,7 +45,7 @@ function ChatPage() {
 
         <div className="text-right">
           <p className="text-sm font-semibold text-neutral-900">
-            Climate Risk A.I.
+            Climate Risk Router
           </p>
           <p className="text-xs text-neutral-400">Frontend prototype</p>
         </div>

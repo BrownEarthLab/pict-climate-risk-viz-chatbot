@@ -23,4 +23,8 @@ export const starterPrompts = [
     label: "Limitations",
     text: "What uncertainty should I consider before making a decision?",
   },
+  {
+    label: "Dev Preset",
+    text: "Generate hospital exposure workflow",
+  },
 ];

@@ -42,7 +42,7 @@ function SettingsModal({ onClose }) {
           <div>
             <p className="text-sm text-neutral-400">Prototype settings</p>
             <h2 className="mt-1 text-2xl font-semibold text-neutral-900">
-              Climate Risk A.I. Settings
+              Climate Risk Router Settings
             </h2>
           </div>
 
