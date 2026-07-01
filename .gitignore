@@ -152,3 +152,11 @@ __pycache__/
 cache/
 *.geojson
 *.DS_Store
+# Raw climate data
+data/climate/raw/
+*.nc
+*.nc4
+
+# Large generated climate artifacts
+data/climate/processed/
+!data/climate/processed/.gitkeep

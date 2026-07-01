@@ -1,0 +1,138 @@
+{
+  "name": "compare_climate_periods",
+  "description": "Compare the same climate variable between two time periods, either by loading registered climate layers internally or by comparing two already-loaded climate layer artifacts.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate or hazard variable to compare. Examples: 'extreme_heat_days', 'tasmax', 'heat_index'. Required if climate_artifact_a and climate_artifact_b are not provided."
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Region name for the comparison. Examples: 'Fiji', 'Tonga', 'Melanesia'. Required if climate artifacts are not provided."
+      },
+      "period_a": {
+        "type": ["string", "null"],
+        "description": "Baseline or earlier period. Examples: '2050s', '2050', 'historical'. Required if climate_artifact_a is not provided."
+      },
+      "period_b": {
+        "type": ["string", "null"],
+        "description": "Comparison or later period. Examples: '2060s', '2100s'. Required if climate_artifact_b is not provided."
+      },
+      "scenario": {
+        "type": ["string", "null"],
+        "description": "Optional climate scenario. Examples: 'SSP2-4.5', 'ssp245', 'SSP5-8.5', 'ssp585'."
+      },
+      "model": {
+        "type": ["string", "null"],
+        "description": "Optional climate model name. Example: 'ACCESS-CM2'."
+      },
+      "climate_artifact_a": {
+        "type": ["object", "null"],
+        "description": "Optional already-loaded climate layer artifact for period_a."
+      },
+      "climate_artifact_b": {
+        "type": ["object", "null"],
+        "description": "Optional already-loaded climate layer artifact for period_b."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Optional numeric column to compare. If omitted, the function uses the value_column metadata from the input artifacts."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'climate_period_comparison'. Can also be 'climate_period_comparison_failed'."
+      },
+      "layer_id": {
+        "type": ["string", "null"],
+        "description": "Generated comparison layer ID."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate variable being compared."
+      },
+      "region_name": {
+        "type": ["string", "null"]
+      },
+      "period_a": {
+        "type": ["string", "null"],
+        "description": "Earlier/baseline period."
+      },
+      "period_b": {
+        "type": ["string", "null"],
+        "description": "Later/comparison period."
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection containing the comparison layer."
+      },
+      "feature_count": {
+        "type": "integer"
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main downstream value column. Usually 'absolute_change'."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "comparison_columns": {
+        "type": "object",
+        "description": "Names of period_a value column, period_b value column, absolute change column, percent change column, and change direction column."
+      },
+      "summary": {
+        "type": "object",
+        "description": "Summary statistics for the period comparison."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about parent layers and comparison method."
+      }
+    }
+  }
+}
