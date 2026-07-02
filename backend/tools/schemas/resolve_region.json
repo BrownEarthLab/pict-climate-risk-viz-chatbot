@@ -1,0 +1,69 @@
+{
+  "name": "resolve_region",
+  "description": "Resolve a human-readable region name such as Fiji, Tonga, Melanesia, or a specific island into a spatial region artifact with GeoJSON geometry.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "region_name": {
+        "type": "string",
+        "description": "The user-facing region name to resolve, such as 'Fiji', 'Tonga', 'Vanuatu', 'Melanesia', 'PNG', or 'Pacific Islands'."
+      },
+      "admin_level": {
+        "type": ["string", "null"],
+        "description": "Optional administrative level to disambiguate the region. Examples: country, island, province, district, city, subregion, region_group."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": ["region_name"],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'region'. Can also be 'region_resolution_failed' or 'region_resolution_ambiguous'."
+      },
+      "input_region_name": {
+        "type": "string"
+      },
+      "resolved_name": {
+        "type": ["string", "null"]
+      },
+      "admin_level": {
+        "type": ["string", "null"]
+      },
+      "geometry": {
+        "type": ["object", "null"],
+        "description": "GeoJSON geometry object."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object"
+      }
+    }
+  }
+}

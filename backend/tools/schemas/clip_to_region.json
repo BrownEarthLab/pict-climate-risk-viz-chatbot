@@ -1,0 +1,130 @@
+{
+  "name": "clip_to_region",
+  "description": "Clip a spatial artifact, such as a climate layer, to a selected region. The region can be provided either as a region name or as a region artifact returned by resolve_region.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input_artifact": {
+        "type": "object",
+        "description": "A spatial artifact containing a GeoJSON FeatureCollection. Usually returned by load_climate_projection."
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Optional region name to clip to, such as 'Fiji', 'Tonga', 'Melanesia', or 'Pacific Island Countries and Territories'. Required if region_artifact is not supplied."
+      },
+      "region_artifact": {
+        "type": ["object", "null"],
+        "description": "Optional region artifact returned by resolve_region. If provided, this is used instead of resolving region_name again."
+      },
+      "keep_empty": {
+        "type": "boolean",
+        "default": false,
+        "description": "If false, return a failure artifact when clipping produces no features. If true, return a clipped_layer artifact with zero features."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": ["input_artifact"],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'clipped_layer'. Can also be 'clip_to_region_failed'."
+      },
+      "input_artifact_type": {
+        "type": ["string", "null"],
+        "description": "Artifact type of the input layer."
+      },
+      "input_layer_id": {
+        "type": ["string", "null"],
+        "description": "Layer ID of the input artifact, if available."
+      },
+      "variable": {
+        "type": ["string", "null"]
+      },
+      "source_variable": {
+        "type": ["string", "null"]
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Resolved region name used for clipping."
+      },
+      "admin_level": {
+        "type": ["string", "null"],
+        "description": "Administrative level of the clipping region."
+      },
+      "period": {
+        "type": ["string", "null"]
+      },
+      "start_year": {
+        "type": ["integer", "null"]
+      },
+      "end_year": {
+        "type": ["integer", "null"]
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection after clipping."
+      },
+      "feature_count": {
+        "type": "integer",
+        "description": "Number of features after clipping."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main numeric column to use for downstream analysis."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "uncertainty_columns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about the clipping method, region resolution, and parent artifact provenance."
+      }
+    }
+  }
+}

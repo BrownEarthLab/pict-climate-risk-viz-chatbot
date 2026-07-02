@@ -1,0 +1,30 @@
+[
+  {
+    "layer_id": "fiji_extreme_heat_days_2050s_ssp245_access_cm2",
+    "artifact_type": "climate_layer",
+    "variable": "extreme_heat_days",
+    "source_variable": "tasmax",
+    "region_name": "Fiji",
+    "period": "2050s",
+    "start_year": 2041,
+    "end_year": 2060,
+    "scenario": "SSP2-4.5",
+    "scenario_code": "ssp245",
+    "model": "ACCESS-CM2",
+    "variant": "r1i1p1f1",
+    "threshold_c": 35.0,
+    "units": "days/year",
+    "value_column": "extreme_heat_days_mean",
+    "uncertainty_columns": [
+      "extreme_heat_days_min",
+      "extreme_heat_days_max"
+    ],
+    "path": "data/climate/processed/fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson",
+    "file_format": "geojson",
+    "geometry_type": "polygon_grid",
+    "source_dataset": "NASA NEX-GDDP-CMIP6",
+    "source_access_method": "NASA NCCS THREDDS NetcdfSubset",
+    "source_url_base": "https://ds.nccs.nasa.gov/thredds/ncss/grid/AMES/NEX/GDDP-CMIP6",
+    "description": "Derived extreme_heat_days for Fiji, 2050s, SSP2-4.5, model ACCESS-CM2. Values represent mean annual number of days with tasmax >= 35.0\u00b0C."
+  }
+]
