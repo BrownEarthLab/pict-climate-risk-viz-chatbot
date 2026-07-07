@@ -1,0 +1,209 @@
+{
+  "name": "rank_regions",
+  "description": "Rank administrative regions by a climate, hazard, exposure, vulnerability, or risk value. Usually used after aggregate_by_admin_region.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input_artifact": {
+        "type": "object",
+        "description": "Required region-level spatial artifact containing GeoJSON features and a numeric value column to rank."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Numeric column used for ranking. If omitted, the function uses the value_column metadata from the input artifact."
+      },
+      "region_name_column": {
+        "type": ["string", "null"],
+        "description": "Optional column containing region names. If omitted, the function tries common names like admin_name, region_name, name, district, province, island, or municipality."
+      },
+      "region_id_column": {
+        "type": ["string", "null"],
+        "description": "Optional column containing stable region IDs. If omitted, the function tries common names like admin_id, region_id, id, gid, adm_id, or iso_code."
+      },
+      "direction": {
+        "type": "string",
+        "default": "highest",
+        "description": "Whether higher or lower values should rank first. Supported examples: highest, lowest, top, bottom, max, min, worst, best."
+      },
+      "top_n": {
+        "type": ["integer", "null"],
+        "default": 10,
+        "description": "Number of ranked regions to return when include_all_regions is false. If null, all valid regions are returned."
+      },
+      "include_all_regions": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, return all valid regions ranked, ignoring top_n filtering."
+      },
+      "include_missing_regions": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, include regions with missing or non-numeric values as unranked rows."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": ["input_artifact"],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'ranked_regions_layer'. Can also be 'rank_regions_failed'."
+      },
+      "input_artifact_type": {
+        "type": ["string", "null"],
+        "description": "Artifact type of the input region layer."
+      },
+      "input_layer_id": {
+        "type": ["string", "null"],
+        "description": "Layer ID of the input artifact, if available."
+      },
+      "layer_id": {
+        "type": ["string", "null"],
+        "description": "Generated layer ID for the ranked-region output."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate, hazard, exposure, vulnerability, or risk variable ranked."
+      },
+      "source_variable": {
+        "type": ["string", "null"],
+        "description": "Original source variable, if different from the derived variable."
+      },
+      "region_name": {
+        "type": ["string", "null"]
+      },
+      "period": {
+        "type": ["string", "null"]
+      },
+      "start_year": {
+        "type": ["integer", "null"]
+      },
+      "end_year": {
+        "type": ["integer", "null"]
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "admin_level": {
+        "type": ["string", "null"],
+        "description": "Admin level inherited from the input artifact, if available."
+      },
+      "region_name_column": {
+        "type": ["string", "null"],
+        "description": "Column used for region names."
+      },
+      "region_id_column": {
+        "type": ["string", "null"],
+        "description": "Column used for region IDs."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main downstream value column. Usually 'rank_score'."
+      },
+      "source_value_column": {
+        "type": ["string", "null"],
+        "description": "Original numeric column used for ranking."
+      },
+      "rank_column": {
+        "type": "string",
+        "description": "Column containing integer ranks. Usually 'region_rank'."
+      },
+      "rank_percentile_column": {
+        "type": "string",
+        "description": "Column containing rank percentile values. Usually 'rank_percentile'."
+      },
+      "rank_category_column": {
+        "type": "string",
+        "description": "Column containing rank categories. Usually 'rank_category'."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "direction": {
+        "type": "string",
+        "description": "Normalized rank direction: highest or lowest."
+      },
+      "top_n": {
+        "type": ["integer", "null"],
+        "description": "Number of ranked regions returned when top_n filtering is used."
+      },
+      "include_all_regions": {
+        "type": "boolean"
+      },
+      "include_missing_regions": {
+        "type": "boolean"
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection containing ranked region features."
+      },
+      "feature_count": {
+        "type": "integer",
+        "description": "Number of output ranked-region features."
+      },
+      "input_feature_count": {
+        "type": "integer",
+        "description": "Number of input region features before ranking."
+      },
+      "valid_count": {
+        "type": "integer",
+        "description": "Number of regions with valid numeric values."
+      },
+      "missing_count": {
+        "type": "integer",
+        "description": "Number of regions with missing or non-numeric values."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "summary": {
+        "type": ["object", "null"],
+        "description": "Summary information about ranking input/output values."
+      },
+      "table": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "description": "Table-friendly ranked output with rank, region name, value, rank score, percentile, and category."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about ranking method and parent artifact."
+      }
+    }
+  }
+}

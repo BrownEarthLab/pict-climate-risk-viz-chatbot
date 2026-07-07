@@ -1,0 +1,133 @@
+{
+  "name": "compare_climate_scenarios",
+  "description": "Compare the same climate variable, region, and period across multiple climate scenarios. The function can either load registered climate layers internally or compare already-loaded climate layer artifacts.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate or hazard variable to compare. Examples: 'extreme_heat_days', 'tasmax', 'heat_index'. Required if climate_artifacts are not provided."
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Region name for the comparison. Examples: 'Fiji', 'Tonga', 'Melanesia'. Required if climate_artifacts are not provided."
+      },
+      "period": {
+        "type": ["string", "null"],
+        "description": "Projection period to compare. Examples: '2050s', '2060s', '2100s'. Required if climate_artifacts are not provided."
+      },
+      "scenarios": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "string"
+        },
+        "description": "Climate scenarios to compare. Examples: ['SSP2-4.5', 'SSP5-8.5'] or ['ssp245', 'ssp585']. Required if climate_artifacts are not provided."
+      },
+      "model": {
+        "type": ["string", "null"],
+        "description": "Optional climate model name. Example: 'ACCESS-CM2'."
+      },
+      "climate_artifacts": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "object"
+        },
+        "description": "Optional already-loaded climate layer artifacts, one per scenario."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Optional numeric column to compare. If omitted, the function uses the value_column metadata from the input artifacts."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'climate_scenario_comparison'. Can also be 'climate_scenario_comparison_failed'."
+      },
+      "layer_id": {
+        "type": ["string", "null"],
+        "description": "Generated comparison layer ID."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate variable being compared."
+      },
+      "region_name": {
+        "type": ["string", "null"]
+      },
+      "period": {
+        "type": ["string", "null"],
+        "description": "Projection period used for the scenario comparison."
+      },
+      "scenarios": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Scenarios included in the comparison."
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection containing the scenario comparison layer."
+      },
+      "feature_count": {
+        "type": "integer"
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main downstream value column. Usually 'scenario_range'."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "comparison_columns": {
+        "type": "object",
+        "description": "Names of scenario-specific value columns, scenario min/max/mean/range columns, and highest/lowest scenario columns."
+      },
+      "summary": {
+        "type": "object",
+        "description": "Summary statistics for the scenario comparison."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about parent scenario layers and comparison method."
+      }
+    }
+  }
+}

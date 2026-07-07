@@ -1,0 +1,208 @@
+{
+  "name": "aggregate_by_admin_region",
+  "description": "Aggregate a gridded climate, hazard, exposure, or risk layer into administrative regions using spatial joins and summary statistics.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input_artifact": {
+        "type": "object",
+        "description": "Required input spatial artifact containing GeoJSON features and a numeric value column to aggregate."
+      },
+      "admin_boundaries_artifact": {
+        "type": ["object", "null"],
+        "description": "Optional admin boundary artifact containing GeoJSON polygon features. Use this when boundaries have already been loaded or resolved."
+      },
+      "admin_boundaries_path": {
+        "type": ["string", "null"],
+        "description": "Optional path to a GeoJSON admin boundary file. Relative paths are resolved from data/reference/admin_boundaries/."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Numeric column to aggregate. If omitted, the function uses the value_column metadata from the input artifact."
+      },
+      "aggregation_methods": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "string"
+        },
+        "description": "Aggregation methods to compute. Supported examples: count, mean, median, min, max, std, sum, variance, p10, p25, p75, p90, p95."
+      },
+      "admin_level": {
+        "type": ["string", "null"],
+        "description": "Optional admin level label, such as admin0, admin1, admin2, province, district, island, or municipality."
+      },
+      "admin_name_column": {
+        "type": ["string", "null"],
+        "description": "Optional column in the admin boundaries containing region names. If omitted, the function tries common names like admin_name, name, district, province, island, or municipality."
+      },
+      "admin_id_column": {
+        "type": ["string", "null"],
+        "description": "Optional column in the admin boundaries containing stable region IDs. If omitted, the function tries common names like admin_id, id, gid, adm_id, or iso_code."
+      },
+      "join_method": {
+        "type": "string",
+        "default": "centroid_within",
+        "description": "Spatial join method. Supported values: centroid_within or intersects."
+      },
+      "keep_admin_regions_without_data": {
+        "type": "boolean",
+        "default": true,
+        "description": "If true, return admin regions even when no input features were matched to them."
+      },
+      "include_unmatched_warning": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to include a warning when input features do not match any admin region."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": ["input_artifact"],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'admin_region_aggregation_layer'. Can also be 'admin_region_aggregation_failed'."
+      },
+      "input_artifact_type": {
+        "type": ["string", "null"],
+        "description": "Artifact type of the input layer that was aggregated."
+      },
+      "input_layer_id": {
+        "type": ["string", "null"],
+        "description": "Layer ID of the input artifact, if available."
+      },
+      "layer_id": {
+        "type": ["string", "null"],
+        "description": "Generated layer ID for the admin aggregation output."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate, hazard, exposure, or risk variable aggregated."
+      },
+      "source_variable": {
+        "type": ["string", "null"],
+        "description": "Original source variable, if different from the derived variable."
+      },
+      "region_name": {
+        "type": ["string", "null"]
+      },
+      "period": {
+        "type": ["string", "null"]
+      },
+      "start_year": {
+        "type": ["integer", "null"]
+      },
+      "end_year": {
+        "type": ["integer", "null"]
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "admin_level": {
+        "type": ["string", "null"],
+        "description": "Admin level label used for the aggregation."
+      },
+      "admin_name_column": {
+        "type": ["string", "null"],
+        "description": "Admin boundary column used as the region name."
+      },
+      "admin_id_column": {
+        "type": ["string", "null"],
+        "description": "Admin boundary column used as the region ID."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main downstream value column, usually the mean aggregation column."
+      },
+      "source_value_column": {
+        "type": ["string", "null"],
+        "description": "Original numeric input column that was aggregated."
+      },
+      "aggregation_methods": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Aggregation methods computed."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection containing aggregated admin-region features."
+      },
+      "feature_count": {
+        "type": "integer",
+        "description": "Number of output admin-region features."
+      },
+      "input_feature_count": {
+        "type": "integer",
+        "description": "Number of input features before aggregation."
+      },
+      "admin_region_count": {
+        "type": "integer",
+        "description": "Number of admin regions returned."
+      },
+      "matched_feature_count": {
+        "type": "integer",
+        "description": "Number of input features matched to an admin region."
+      },
+      "unmatched_feature_count": {
+        "type": "integer",
+        "description": "Number of input features not matched to any admin region."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "summary": {
+        "type": ["object", "null"],
+        "description": "Summary information about input values, matching, and aggregated output values."
+      },
+      "table": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "description": "Table-friendly admin-region aggregation output."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about spatial join method, admin boundary source, and parent artifact."
+      }
+    }
+  }
+}

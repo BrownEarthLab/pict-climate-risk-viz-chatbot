@@ -1,0 +1,219 @@
+{
+  "name": "find_extreme_locations",
+  "description": "Find the highest, lowest, or top-percentile locations in a climate, hazard, risk, threshold, or other spatial layer. The function can rank an already-loaded artifact or load a registered climate layer internally.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input_artifact": {
+        "type": ["object", "null"],
+        "description": "Optional already-loaded or clipped spatial artifact containing GeoJSON features and a numeric value column."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate, hazard, or risk variable to rank. Examples: 'extreme_heat_days', 'tasmax', 'heat_index', 'risk_score'. Required if input_artifact is not provided."
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Region to analyze. Examples: 'Fiji', 'Tonga', 'Melanesia'. Required if input_artifact is not provided."
+      },
+      "period": {
+        "type": ["string", "null"],
+        "description": "Projection period. Examples: '2050s', '2060s', '2100s'. Required if input_artifact is not provided."
+      },
+      "scenario": {
+        "type": ["string", "null"],
+        "description": "Optional emissions scenario. Examples: 'SSP2-4.5', 'SSP5-8.5', 'ssp245', 'ssp585'."
+      },
+      "model": {
+        "type": ["string", "null"],
+        "description": "Optional climate model name. Example: 'ACCESS-CM2'."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Optional numeric column used to rank extreme locations. If omitted, the function uses the value_column metadata from the input artifact."
+      },
+      "direction": {
+        "type": "string",
+        "default": "highest",
+        "description": "Whether to find the highest or lowest values. Supported examples: 'highest', 'lowest', 'top', 'bottom', 'max', 'min', 'hottest', 'worst'."
+      },
+      "selection_method": {
+        "type": ["string", "null"],
+        "description": "How to select extreme locations. Supported values: 'top_n' or 'percentile'. If omitted, the function uses 'percentile' when percentile is provided, otherwise 'top_n'."
+      },
+      "top_n": {
+        "type": ["integer", "null"],
+        "default": 10,
+        "description": "Number of locations to return when selection_method is 'top_n'."
+      },
+      "percentile": {
+        "type": ["number", "null"],
+        "description": "Percentile cutoff when selection_method is 'percentile'. Accepts either 95 or 0.95."
+      },
+      "clip_to_region": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to clip the layer to the requested region before ranking extreme locations."
+      },
+      "region_artifact": {
+        "type": ["object", "null"],
+        "description": "Optional resolved region artifact from resolve_region. Used for clipping if clip_to_region is true."
+      },
+      "include_full_input": {
+        "type": "boolean",
+        "default": false,
+        "description": "Whether to include a ranked GeoJSON version of the full valid input layer in the output."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'extreme_locations_layer'. Can also be 'extreme_locations_failed'."
+      },
+      "input_artifact_type": {
+        "type": ["string", "null"],
+        "description": "Artifact type of the input that was ranked."
+      },
+      "input_layer_id": {
+        "type": ["string", "null"],
+        "description": "Layer ID of the input artifact, if available."
+      },
+      "layer_id": {
+        "type": ["string", "null"],
+        "description": "Generated layer ID for the extreme-locations output."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate, hazard, or risk variable analyzed."
+      },
+      "source_variable": {
+        "type": ["string", "null"],
+        "description": "Original source variable, if different from the derived variable."
+      },
+      "region_name": {
+        "type": ["string", "null"]
+      },
+      "period": {
+        "type": ["string", "null"]
+      },
+      "start_year": {
+        "type": ["integer", "null"]
+      },
+      "end_year": {
+        "type": ["integer", "null"]
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main downstream value column. Usually 'extreme_score'."
+      },
+      "source_value_column": {
+        "type": ["string", "null"],
+        "description": "Original numeric column used for ranking."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "direction": {
+        "type": "string",
+        "description": "Normalized direction used: 'highest' or 'lowest'."
+      },
+      "selection_method": {
+        "type": "string",
+        "description": "Normalized selection method used: 'top_n' or 'percentile'."
+      },
+      "top_n": {
+        "type": ["integer", "null"],
+        "description": "Number of locations selected if using top_n."
+      },
+      "percentile": {
+        "type": ["number", "null"],
+        "description": "Percentile used if using percentile selection."
+      },
+      "percentile_threshold": {
+        "type": ["number", "null"],
+        "description": "Numeric threshold implied by the percentile selection."
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection containing selected extreme locations."
+      },
+      "full_input_geojson": {
+        "type": ["object", "null"],
+        "description": "Optional ranked GeoJSON FeatureCollection for the full valid input layer."
+      },
+      "feature_count": {
+        "type": "integer",
+        "description": "Number of extreme-location features returned."
+      },
+      "input_feature_count": {
+        "type": "integer",
+        "description": "Number of input features before ranking."
+      },
+      "valid_count": {
+        "type": "integer",
+        "description": "Number of features with valid numeric values."
+      },
+      "missing_count": {
+        "type": "integer",
+        "description": "Number of features with missing or non-numeric values."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "summary": {
+        "type": ["object", "null"],
+        "description": "Summary statistics for the input layer and selected extreme locations."
+      },
+      "table": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "description": "Table-friendly ranked output with rank, value, longitude, and latitude."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about ranking method, clipping, and parent artifact."
+      }
+    }
+  }
+}

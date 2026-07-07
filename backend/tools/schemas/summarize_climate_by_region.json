@@ -1,0 +1,181 @@
+{
+  "name": "summarize_climate_by_region",
+  "description": "Summarize a climate layer over a region using statistics such as mean, median, min, max, standard deviation, and percentiles. The function can summarize an already-loaded climate artifact or load a registered climate layer internally.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input_artifact": {
+        "type": ["object", "null"],
+        "description": "Optional already-loaded or clipped climate artifact containing GeoJSON features and a numeric value column."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate variable to summarize. Examples: 'extreme_heat_days', 'tasmax', 'heat_index'. Required if input_artifact is not provided."
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Region to summarize over. Examples: 'Fiji', 'Tonga', 'Melanesia'. Required if input_artifact is not provided."
+      },
+      "period": {
+        "type": ["string", "null"],
+        "description": "Projection period. Examples: '2050s', '2060s', '2100s'. Required if input_artifact is not provided."
+      },
+      "scenario": {
+        "type": ["string", "null"],
+        "description": "Optional emissions scenario. Examples: 'SSP2-4.5', 'SSP5-8.5', 'ssp245', 'ssp585'."
+      },
+      "model": {
+        "type": ["string", "null"],
+        "description": "Optional climate model name. Example: 'ACCESS-CM2'."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Optional numeric column to summarize. If omitted, the function uses the value_column metadata from the input artifact."
+      },
+      "statistics": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional list of statistics to compute. Supported examples: count, missing_count, mean, median, min, max, std, sum, variance, p10, p25, p75, p90, p95."
+      },
+      "clip_to_region": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to clip the climate layer to the requested region before summarizing."
+      },
+      "region_artifact": {
+        "type": ["object", "null"],
+        "description": "Optional resolved region artifact from resolve_region. Used for clipping if clip_to_region is true."
+      },
+      "include_geometry": {
+        "type": "boolean",
+        "default": false,
+        "description": "Whether to include the summarized input GeoJSON in the output. Usually false because the main output is a summary table."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually 'climate_region_summary'. Can also be 'climate_region_summary_failed'."
+      },
+      "input_artifact_type": {
+        "type": ["string", "null"],
+        "description": "Artifact type of the input that was summarized."
+      },
+      "input_layer_id": {
+        "type": ["string", "null"],
+        "description": "Layer ID of the input artifact, if available."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Climate variable summarized."
+      },
+      "source_variable": {
+        "type": ["string", "null"],
+        "description": "Original source variable, if different from the derived variable."
+      },
+      "region_name": {
+        "type": ["string", "null"],
+        "description": "Region summarized."
+      },
+      "period": {
+        "type": ["string", "null"],
+        "description": "Projection period summarized."
+      },
+      "start_year": {
+        "type": ["integer", "null"]
+      },
+      "end_year": {
+        "type": ["integer", "null"]
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Numeric column used for the summary."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "statistics_requested": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Statistics requested by the caller."
+      },
+      "summary": {
+        "type": ["object", "null"],
+        "description": "Dictionary of computed summary statistics."
+      },
+      "table": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "description": "Table-friendly version of the summary, with statistic and value fields."
+      },
+      "feature_count": {
+        "type": "integer",
+        "description": "Total number of features considered."
+      },
+      "valid_count": {
+        "type": "integer",
+        "description": "Number of features with valid numeric values."
+      },
+      "missing_count": {
+        "type": "integer",
+        "description": "Number of features with missing or non-numeric values."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "Optional GeoJSON FeatureCollection, included only if include_geometry is true."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about how the summary was computed and the parent artifact used."
+      }
+    }
+  }
+}
