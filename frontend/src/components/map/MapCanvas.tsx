@@ -71,6 +71,78 @@ const MapCanvas = ({
   } = useMapbox();
   const [isLegendExpanded, setIsLegendExpanded] = useState(true);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPopupRef = useRef<mapboxgl.Popup | null>(null);
+
+  // Hover tooltip for dynamic layers
+  useEffect(() => {
+    if (!mapboxMap) return;
+
+    const dynamicLayers = [
+      "sea-level-h3-layer",
+      "power-gen-fill-layer",
+      "water-access-fill-layer",
+    ];
+
+    const handleMouseMove = (e: mapboxgl.MapMouseEvent) => {
+      // Check each dynamic layer for features
+      for (const layerId of dynamicLayers) {
+        if (!mapboxMap.getLayer(layerId)) continue;
+        const features = mapboxMap.queryRenderedFeatures(e.point, {
+          layers: [layerId],
+        });
+        if (features.length > 0) {
+          const feature = features[0];
+          const props = feature.properties || {};
+          const layerName = props.layer_name || layerId;
+          const indicatorValue = props.indicator_value;
+          const regionName = props.name || props.geo_pict || "Unknown";
+
+          let tooltipContent = `<strong>${regionName}</strong>`;
+          if (indicatorValue !== undefined && indicatorValue !== null) {
+            let unit = "";
+            if (layerId === "sea-level-h3-layer") unit = "m";
+            else if (layerId === "water-access-fill-layer") unit = "%";
+            else if (layerId === "power-gen-fill-layer") unit = " GWh";
+            tooltipContent += `<br/>Value: ${Number(indicatorValue).toFixed(3)}${unit}`;
+          }
+          tooltipContent += `<br/><span style="font-size:10px;color:#888;">${layerName}</span>`;
+
+          mapboxMap.getCanvas().style.cursor = "pointer";
+
+          if (hoverPopupRef.current) {
+            hoverPopupRef.current.remove();
+          }
+          hoverPopupRef.current = new mapboxgl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 10,
+            maxWidth: "220px",
+          })
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<div style="font-family:sans-serif;font-size:12px;padding:4px 6px;line-height:1.4;">${tooltipContent}</div>`
+            )
+            .addTo(mapboxMap);
+          return;
+        }
+      }
+
+      // No feature found — remove hover popup
+      mapboxMap.getCanvas().style.cursor = "";
+      if (hoverPopupRef.current) {
+        hoverPopupRef.current.remove();
+        hoverPopupRef.current = null;
+      }
+    };
+
+    mapboxMap.on("mousemove", handleMouseMove);
+    return () => {
+      mapboxMap.off("mousemove", handleMouseMove);
+      if (hoverPopupRef.current) {
+        hoverPopupRef.current.remove();
+      }
+    };
+  }, [mapboxMap]);
 
   useEffect(() => {
     if (!mapboxMap || !drawnGeometry) {
@@ -162,6 +234,18 @@ const MapCanvas = ({
     };
   }, [mapboxMap]);
 
+  // Helper to toggle a layer on (off if already active)
+  const toggleLayer = (layer: typeof activeLayer, isGlobal: boolean) => {
+    if (activeLayer !== layer) {
+      setActiveLayer(layer);
+      setShowGlobalDataset(isGlobal);
+    } else if (showGlobalDataset === isGlobal) {
+      setActiveLayer(null);
+    } else {
+      setShowGlobalDataset(isGlobal);
+    }
+  };
+
   return (
     <div className="absolute inset-0">
       <div ref={mapContainerRef} className="h-full w-full" />
@@ -181,7 +265,7 @@ const MapCanvas = ({
           <MapControls map={mapboxMap} />
 
           {/* Premium Floating Layer Selector & Legend */}
-          <div className="absolute bottom-16 left-4 z-20 w-[240px] rounded-2xl border border-black/5 bg-white/90 p-4 shadow-lg backdrop-blur-md transition-all duration-300">
+          <div className="absolute bottom-16 left-4 z-20 w-[260px] rounded-2xl border border-black/5 bg-white/90 p-4 shadow-lg backdrop-blur-md transition-all duration-300">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                 Map Layers
@@ -196,46 +280,67 @@ const MapCanvas = ({
 
             {isLegendExpanded && (
               <div className="mt-3 flex flex-col gap-3">
-                {/* Pill/Tabs Selector */}
-                <div className="flex rounded-xl bg-neutral-100 p-0.5">
-                  <button
-                    onClick={() => {
-                      if (activeLayer !== "tas") {
-                        setActiveLayer("tas");
-                        setShowGlobalDataset(true);
-                      } else if (showGlobalDataset) {
-                        setShowGlobalDataset(false);
-                      } else {
-                        setActiveLayer(null);
-                      }
-                    }}
-                    className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${
-                      activeLayer === "tas"
-                        ? `bg-white shadow-sm ${showGlobalDataset ? "text-neutral-950 font-bold" : "text-neutral-500 font-medium opacity-75"}`
-                        : "text-neutral-500 hover:text-neutral-900"
-                    }`}
-                  >
-                    Air Temp
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (activeLayer !== "wet_bulb") {
-                        setActiveLayer("wet_bulb");
-                        setShowGlobalDataset(true);
-                      } else if (showGlobalDataset) {
-                        setShowGlobalDataset(false);
-                      } else {
-                        setActiveLayer(null);
-                      }
-                    }}
-                    className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${
-                      activeLayer === "wet_bulb"
-                        ? `bg-white shadow-sm ${showGlobalDataset ? "text-neutral-950 font-bold" : "text-neutral-500 font-medium opacity-75"}`
-                        : "text-neutral-500 hover:text-neutral-900"
-                    }`}
-                  >
-                    Wet-Bulb
-                  </button>
+                {/* Static Layers Group */}
+                <div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 mb-1 block">
+                    Climate Projections
+                  </span>
+                  <div className="flex rounded-xl bg-neutral-100 p-0.5">
+                    <button
+                      onClick={() => toggleLayer("tas", true)}
+                      className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${activeLayer === "tas"
+                          ? `bg-white shadow-sm ${showGlobalDataset ? "text-neutral-950 font-bold" : "text-neutral-500 font-medium opacity-75"}`
+                          : "text-neutral-500 hover:text-neutral-900"
+                        }`}
+                    >
+                      Air Temp
+                    </button>
+                    <button
+                      onClick={() => toggleLayer("wet_bulb", true)}
+                      className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${activeLayer === "wet_bulb"
+                          ? `bg-white shadow-sm ${showGlobalDataset ? "text-neutral-950 font-bold" : "text-neutral-500 font-medium opacity-75"}`
+                          : "text-neutral-500 hover:text-neutral-900"
+                        }`}
+                    >
+                      Wet-Bulb
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dynamic Layers Group */}
+                <div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 mb-1 block">
+                    Dynamic Datasets
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => toggleLayer("sea_level", false)}
+                      className={`w-full text-left px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${activeLayer === "sea_level" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                        }`}
+                    >
+                      Sea Level Rise (H3)
+                    </button>
+                    <button
+                      onClick={() => toggleLayer("power_gen", false)}
+                      className={`w-full text-left px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${activeLayer === "power_gen" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                        }`}
+                    >
+                      Power Gen (GWh)
+                    </button>
+                    <button
+                      onClick={() => toggleLayer("water_access", false)}
+                      className={`w-full text-left px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition ${activeLayer === "water_access" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                        }`}
+                    >
+                      Water Access
+                    </button>
+                  </div>
                 </div>
 
                 {/* Legend Display */}
@@ -243,16 +348,33 @@ const MapCanvas = ({
                   <div className="border-t border-neutral-100 pt-3">
                     <div className="mb-2 flex flex-col gap-0.5">
                       <span className="text-xs font-bold text-neutral-800">
-                        {activeLayer === "tas" ? "Near-Surface Air Temp" : "Annual Mean Wet-Bulb"}
+                        {activeLayer === "tas"
+                          ? "Near-Surface Air Temp"
+                          : activeLayer === "wet_bulb"
+                            ? "Annual Mean Wet-Bulb"
+                            : activeLayer === "sea_level"
+                              ? "Sea Level Anomaly"
+                              : activeLayer === "power_gen"
+                                ? "Power Generation (GWh)"
+                                : activeLayer === "water_access"
+                                  ? "Safe Water Access"
+                                  : ""}
                       </span>
                       <span className="text-[10px] text-neutral-400">
-                        Degrees Celsius (°C)
+                        {activeLayer === "tas" || activeLayer === "wet_bulb"
+                          ? "Degrees Celsius (°C)"
+                          : activeLayer === "sea_level"
+                            ? "Meters (m)"
+                            : activeLayer === "power_gen"
+                              ? "Gigawatt-hours (GWh)"
+                              : activeLayer === "water_access"
+                                ? "Percentage (%)"
+                                : ""}
                       </span>
                     </div>
 
-                    {activeLayer === "tas" ? (
+                    {activeLayer === "tas" && (
                       <div>
-                        {/* Gradient Bar for TAS */}
                         <div
                           className="h-2 w-full rounded-full"
                           style={{
@@ -265,9 +387,10 @@ const MapCanvas = ({
                           <span>30°C</span>
                         </div>
                       </div>
-                    ) : (
+                    )}
+
+                    {activeLayer === "wet_bulb" && (
                       <div>
-                        {/* Gradient Bar for WBT */}
                         <div
                           className="h-2 w-full rounded-full"
                           style={{
@@ -279,6 +402,54 @@ const MapCanvas = ({
                           <span>20°C</span>
                           <span>24°C</span>
                           <span>27°C</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeLayer === "sea_level" && (
+                      <div>
+                        <div
+                          className="h-2 w-full rounded-full"
+                          style={{
+                            background: "linear-gradient(to right, #f0f9ff, #38bdf8, #075985)",
+                          }}
+                        />
+                        <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                          <span>Low</span>
+                          <span>Moderate</span>
+                          <span>High</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeLayer === "power_gen" && (
+                      <div>
+                        <div
+                          className="h-2 w-full rounded-full"
+                          style={{
+                            background: "linear-gradient(to right, #fff7ed, #fb923c, #7c2d12)",
+                          }}
+                        />
+                        <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                          <span>Low</span>
+                          <span>Medium</span>
+                          <span>High (GWh)</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeLayer === "water_access" && (
+                      <div>
+                        <div
+                          className="h-2 w-full rounded-full"
+                          style={{
+                            background: "linear-gradient(to right, #fee2e2, #fbbf24, #22c55e)",
+                          }}
+                        />
+                        <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                          <span>0%</span>
+                          <span>50%</span>
+                          <span>100%</span>
                         </div>
                       </div>
                     )}
