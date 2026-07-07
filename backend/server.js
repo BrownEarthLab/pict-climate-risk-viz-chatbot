@@ -288,7 +288,7 @@ app.post("/api/spatial-query", (req, res) => {
  * @returns {Array<{geoPictCode: string, value: number, year: string}>}
  *          One entry per GEO_PICT region (latest year, summed across sub-dimensions).
  */
-function parseSdmxObservations(sdmxData) {
+function parseSdmxObservations(sdmxData, layerName) {
   if (!sdmxData || !sdmxData.data || !Array.isArray(sdmxData.data.dataSets)) {
     return [];
   }
@@ -313,6 +313,64 @@ function parseSdmxObservations(sdmxData) {
     if (!vals || !vals[idx]) return null;
     return vals[idx].id != null ? String(vals[idx].id) : String(idx);
   };
+
+  if (layerName === "sea_level") {
+    // 1. Gather all observations per country and year
+    // valuesByGeoYear: { [geoCode]: { [year]: number } }
+    const valuesByGeoYear = {};
+    let maxYear = "1990";
+
+    for (const dataSet of sdmxData.data.dataSets) {
+      const obs = dataSet && dataSet.observations;
+      if (!obs) continue;
+
+      for (const [keyStr, obsValue] of Object.entries(obs)) {
+        const idxs = keyStr.split(":");
+        const geoCode = dimValueIdAt(geoPos, Number(idxs[geoPos]));
+        const yearCode = dimValueIdAt(timePos, Number(idxs[timePos]));
+        if (!geoCode || !yearCode) continue;
+
+        const val = Array.isArray(obsValue) ? obsValue[0] : null;
+        if (val === null || val === undefined || Number.isNaN(Number(val))) continue;
+
+        const numVal = Number(val);
+        if (!valuesByGeoYear[geoCode]) {
+          valuesByGeoYear[geoCode] = {};
+        }
+        valuesByGeoYear[geoCode][yearCode] = (valuesByGeoYear[geoCode][yearCode] || 0) + numVal;
+
+        if (yearCode > maxYear) {
+          maxYear = yearCode;
+        }
+      }
+    }
+
+    // 2. Average the last 10 years of data (e.g. maxYear - 9 to maxYear)
+    const endYear = parseInt(maxYear, 10);
+    const startYear = endYear - 9;
+
+    const observations = [];
+    for (const [geoCode, yearsMap] of Object.entries(valuesByGeoYear)) {
+      let sum = 0;
+      let count = 0;
+      for (let y = startYear; y <= endYear; y++) {
+        const yStr = String(y);
+        if (yearsMap[yStr] !== undefined) {
+          sum += yearsMap[yStr];
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        observations.push({
+          geoPictCode: geoCode,
+          value: parseFloat((sum / count).toFixed(4)),
+          year: `${startYear}-${endYear}`,
+        });
+      }
+    }
+    return observations;
+  }
 
   // Accumulate sum per `${geo}|${year}` and track year per geo.
   // sums: { "GEO|YEAR": number }
@@ -373,7 +431,7 @@ async function handleLayerRequest(layerName, res) {
     }
 
     // 4. Parse observations
-    const observations = parseSdmxObservations(sdmxData);
+    const observations = parseSdmxObservations(sdmxData, layerName);
 
     // 5. Join with region geometries
     const regionFeatures = joinObservationsToRegions(observations, layerName);
@@ -401,7 +459,7 @@ async function handleLayerRequest(layerName, res) {
     // 5. Fallback: try stale cache
     const staleData = getStaleFromDisk(cacheKey);
     if (staleData) {
-      const observations = parseSdmxObservations(staleData);
+      const observations = parseSdmxObservations(staleData, layerName);
       const regionFeatures = joinObservationsToRegions(observations, layerName);
 
       let result;
