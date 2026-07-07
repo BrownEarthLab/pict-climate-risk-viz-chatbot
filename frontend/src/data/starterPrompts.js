@@ -27,4 +27,17 @@ export const starterPrompts = [
     label: "Dev Preset",
     text: "Generate hospital exposure workflow",
   },
+  // New starter bundle prompts
+  {
+    label: "Sea Level",
+    text: "Show sea level anomalies across Pacific islands.",
+  },
+  {
+    label: "Power Assets",
+    text: "Where are power generation assets located in the Pacific?",
+  },
+  {
+    label: "Water Access",
+    text: "Show safely managed drinking water access by region.",
+  },
 ];
