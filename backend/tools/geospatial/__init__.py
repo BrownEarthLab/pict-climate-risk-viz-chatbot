@@ -11,6 +11,7 @@ from .extremes import find_extreme_locations
 from .aggregation import aggregate_by_admin_region
 from .ranking import rank_regions
 from .assets import sample_hazard_at_assets
+from .exposure import calculate_infrastructure_exposure
 
 __all__ = [
     "resolve_region",
@@ -24,4 +25,5 @@ __all__ = [
     "aggregate_by_admin_region",
     "rank_regions",
     "sample_hazard_at_assets",
+    "calculate_infrastructure_exposure",
 ]

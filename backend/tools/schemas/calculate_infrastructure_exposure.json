@@ -1,0 +1,230 @@
+{
+  "name": "calculate_infrastructure_exposure",
+  "description": "Calculate which infrastructure assets are exposed to a hazard, climate, or risk threshold, usually from an asset-hazard sample layer.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input_artifact": {
+        "type": "object",
+        "description": "Required asset-hazard sample artifact containing one GeoJSON feature per asset and a numeric sampled value column."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Numeric column used to evaluate exposure. If omitted, uses input_artifact.value_column or sampled_hazard_value."
+      },
+      "threshold": {
+        "type": ["number", "null"],
+        "description": "Numeric exposure threshold, such as 30 extreme heat days or 0.5 meters flood depth."
+      },
+      "comparison_operator": {
+        "type": "string",
+        "default": ">=",
+        "description": "Threshold comparison operator. Supported values: >, >=, <, <=, ==, !=, plus aliases like above, at_least, below, at_most."
+      },
+      "asset_name_column": {
+        "type": ["string", "null"],
+        "description": "Optional column containing asset names. If omitted, the function tries common fields like asset_name, name, facility_name, school_name, hospital_name, port_name, or substation_name."
+      },
+      "asset_id_column": {
+        "type": ["string", "null"],
+        "description": "Optional column containing stable asset IDs. If omitted, the function tries common fields like asset_id, id, facility_id, school_id, hospital_id, port_id, substation_id, or osm_id."
+      },
+      "asset_type_column": {
+        "type": ["string", "null"],
+        "description": "Optional column containing infrastructure type/category. If omitted, the function tries common fields like asset_type, type, category, sector, or class."
+      },
+      "group_by_column": {
+        "type": ["string", "null"],
+        "description": "Optional column used to summarize exposure by group. If omitted, asset_type_column is used when available."
+      },
+      "include_unexposed_assets": {
+        "type": "boolean",
+        "default": true,
+        "description": "If true, keep assets that do not meet the exposure threshold. If false, return only exposed assets."
+      },
+      "include_missing_value_assets": {
+        "type": "boolean",
+        "default": true,
+        "description": "If true, keep assets with missing exposure values. If false, drop them."
+      },
+      "return_geometry_format": {
+        "type": "string",
+        "enum": ["geojson"],
+        "default": "geojson",
+        "description": "Geometry output format. Currently only GeoJSON is supported."
+      }
+    },
+    "required": ["input_artifact", "threshold"],
+    "additionalProperties": false
+  },
+  "returns": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "string",
+        "description": "Usually infrastructure_exposure_layer. Can also be infrastructure_exposure_failed."
+      },
+      "input_artifact_type": {
+        "type": ["string", "null"],
+        "description": "Artifact type of the input asset-hazard layer."
+      },
+      "input_layer_id": {
+        "type": ["string", "null"],
+        "description": "Layer ID of the input artifact."
+      },
+      "layer_id": {
+        "type": ["string", "null"],
+        "description": "Generated layer ID for the infrastructure exposure output."
+      },
+      "variable": {
+        "type": ["string", "null"],
+        "description": "Hazard/climate/risk variable evaluated."
+      },
+      "source_variable": {
+        "type": ["string", "null"]
+      },
+      "region_name": {
+        "type": ["string", "null"]
+      },
+      "period": {
+        "type": ["string", "null"]
+      },
+      "start_year": {
+        "type": ["integer", "null"]
+      },
+      "end_year": {
+        "type": ["integer", "null"]
+      },
+      "scenario": {
+        "type": ["string", "null"]
+      },
+      "scenario_code": {
+        "type": ["string", "null"]
+      },
+      "model": {
+        "type": ["string", "null"]
+      },
+      "variant": {
+        "type": ["string", "null"]
+      },
+      "asset_name_column": {
+        "type": ["string", "null"],
+        "description": "Asset name column used."
+      },
+      "asset_id_column": {
+        "type": ["string", "null"],
+        "description": "Asset ID column used."
+      },
+      "asset_type_column": {
+        "type": ["string", "null"],
+        "description": "Asset type/category column used."
+      },
+      "group_by_column": {
+        "type": ["string", "null"],
+        "description": "Column used for group-level exposure summary."
+      },
+      "value_column": {
+        "type": ["string", "null"],
+        "description": "Main downstream value column. Usually exposure_score."
+      },
+      "source_value_column": {
+        "type": ["string", "null"],
+        "description": "Original sampled hazard/risk value column used for thresholding."
+      },
+      "units": {
+        "type": ["string", "null"]
+      },
+      "threshold": {
+        "type": ["number", "null"],
+        "description": "Numeric threshold used to define exposure."
+      },
+      "comparison_operator": {
+        "type": "string",
+        "description": "Normalized comparison operator used."
+      },
+      "include_unexposed_assets": {
+        "type": "boolean"
+      },
+      "include_missing_value_assets": {
+        "type": "boolean"
+      },
+      "geojson": {
+        "type": ["object", "null"],
+        "description": "GeoJSON FeatureCollection with asset-level exposure columns."
+      },
+      "feature_count": {
+        "type": "integer",
+        "description": "Number of output asset features."
+      },
+      "asset_count": {
+        "type": "integer",
+        "description": "Total number of assets in the output."
+      },
+      "evaluated_asset_count": {
+        "type": "integer",
+        "description": "Number of assets with non-missing values evaluated against the threshold."
+      },
+      "exposed_asset_count": {
+        "type": "integer",
+        "description": "Number of evaluated assets that meet the exposure threshold."
+      },
+      "unexposed_asset_count": {
+        "type": "integer",
+        "description": "Number of evaluated assets that do not meet the exposure threshold."
+      },
+      "missing_value_count": {
+        "type": "integer",
+        "description": "Number of assets with missing exposure values."
+      },
+      "exposure_fraction": {
+        "type": ["number", "null"],
+        "description": "Exposed asset count divided by evaluated asset count."
+      },
+      "exposure_percent": {
+        "type": ["number", "null"],
+        "description": "Exposure fraction as a percentage."
+      },
+      "bbox": {
+        "type": ["array", "null"],
+        "description": "Bounding box as [minx, miny, maxx, maxy]."
+      },
+      "crs": {
+        "type": "string"
+      },
+      "summary": {
+        "type": ["object", "null"],
+        "description": "Overall infrastructure exposure summary."
+      },
+      "group_summary": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "description": "Exposure summaries by asset type or requested grouping column."
+      },
+      "table": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "description": "Table-friendly asset-level exposure output."
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "provenance": {
+        "type": "object",
+        "description": "Information about threshold, operator, and parent artifact."
+      }
+    }
+  }
+}
