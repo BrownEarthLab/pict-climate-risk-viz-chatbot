@@ -12,6 +12,7 @@ from .aggregation import aggregate_by_admin_region
 from .ranking import rank_regions
 from .assets import sample_hazard_at_assets
 from .exposure import calculate_infrastructure_exposure
+from .asset_ranking import rank_assets_by_exposure
 
 __all__ = [
     "resolve_region",
@@ -26,4 +27,5 @@ __all__ = [
     "rank_regions",
     "sample_hazard_at_assets",
     "calculate_infrastructure_exposure",
+    "rank_assets_by_exposure",
 ]
