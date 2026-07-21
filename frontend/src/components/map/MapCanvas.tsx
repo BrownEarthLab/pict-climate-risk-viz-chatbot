@@ -494,7 +494,7 @@ const MapCanvas = ({
                             Heat Exposure
                           </span>
                           <span className="text-[10px] text-neutral-400">
-                            Color = chance of crossing threshold
+                            Darker orange = higher chance of crossing threshold
                           </span>
                           <div className="mt-1 flex items-center gap-2">
   <label className="text-[10px] font-semibold text-orange-600">
@@ -531,12 +531,12 @@ const MapCanvas = ({
                         </div>
 
                         <div
-                          className="h-2 w-full rounded-full"
-                          style={{
-                            background:
-                              "linear-gradient(to right, #3b82f6, #86efac, #fde047, #fb923c, #ef4444)",
-                          }}
-                        />
+  className="h-2 w-full rounded-full"
+  style={{
+    background:
+      "linear-gradient(to right, #fff7ed, #ffedd5, #fdba74, #fb923c, #ea580c, #7c2d12)",
+  }}
+/>
 
                         <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
                           <span>0%</span>
@@ -552,7 +552,7 @@ const MapCanvas = ({
 
                         <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-purple-50 px-3 py-2">
                           <span className="text-[10px] font-bold text-purple-700">
-                            Population affected
+                            Expected exposed population
                           </span>
 
                           <input
@@ -564,6 +564,41 @@ const MapCanvas = ({
                             className="h-4 w-4 cursor-pointer accent-purple-600"
                           />
                         </label>
+                        {showPopulationOverlay && (
+  <div className="mt-2 rounded-xl bg-purple-50/80 p-2">
+    <div className="mb-1 text-[10px] font-bold text-purple-800">
+      Expected exposed people
+    </div>
+
+    <div className="text-[10px] leading-snug text-purple-700">
+      Circle size represents the expected number of people exposed above the
+      selected heat threshold.
+    </div>
+
+    <div className="mt-2 flex items-end justify-between gap-2 px-1">
+      <div className="flex flex-col items-center gap-1">
+        <div className="h-2.5 w-2.5 rounded-full border border-purple-500 bg-purple-400/60" />
+        <div className="text-[9px] font-semibold text-purple-700">
+          ~1k
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-1">
+        <div className="h-5 w-5 rounded-full border border-purple-500 bg-purple-400/60" />
+        <div className="text-[9px] font-semibold text-purple-700">
+          ~6k
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-1">
+        <div className="h-7 w-7 rounded-full border border-purple-500 bg-purple-400/60" />
+        <div className="text-[9px] font-semibold text-purple-700">
+          15k+
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
                         <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-sky-50 px-3 py-2">
                           <span className="text-[10px] font-bold text-sky-700">

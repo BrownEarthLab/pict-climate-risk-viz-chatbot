@@ -17,7 +17,7 @@ interface GroupedFeatures {
 const DEFAULT_LAYER_DISPLAY_NAMES: Record<string, string> = {
   "Manual Heat Risk": "Heat Exposure Grid",
   "Manual Heat Risk Assets": "Infrastructure Assets",
-  "Population Exposure Overlay": "Population Affected",
+  "Population Exposure Overlay": "Expected Exposed Population",
   "Near-Surface Air Temp (TAS)": "Near-Surface Air Temperature",
   "Annual Mean Wet-Bulb (WBT)": "Annual Mean Wet-Bulb Temperature",
 };
@@ -36,14 +36,14 @@ function getReadableAnalysisChain({
   const steps = [
     "Generate a spatial grid inside the drawn boundary.",
     "Fetch short-term heat forecast values at each grid cell.",
-    "Estimate exposure probability and forecast uncertainty for each cell.",
+    "Estimate exposure probability and cell-level forecast spread for each cell.",
   ];
 
   if (showPopulationOverlay) {
     steps.push(
       "Overlay WorldPop population counts on the heat-exposure grid.",
-      "Estimate expected exposed population for each grid cell.",
-      "Rank population priority zones using exposed population and uncertainty."
+      "Calculate expected exposed population as population × exposure probability.",
+      "Rank population priority zones using expected exposed population and forecast spread."
     );
   }
 
@@ -103,6 +103,34 @@ function getExposureLabel(probability: number | null): string {
   return "low";
 }
 
+function getForecastSpreadSummaryText({
+  gridCellCount,
+  highSpreadCellCount,
+}: {
+  gridCellCount: number;
+  highSpreadCellCount: number;
+}): string {
+  if (gridCellCount === 0) {
+    return "Forecast spread is calculated at the grid-cell level, but no heat grid cells are available.";
+  }
+
+  if (highSpreadCellCount === 0) {
+    return `0 of ${gridCellCount} cells have high forecast spread, so high spread is not currently widespread in the selected area.`;
+  }
+
+  const share = highSpreadCellCount / gridCellCount;
+
+  if (share >= 0.8) {
+    return `${highSpreadCellCount} of ${gridCellCount} cells have high forecast spread, so high spread appears across most of the selected area.`;
+  }
+
+  if (share >= 0.3) {
+    return `${highSpreadCellCount} of ${gridCellCount} cells have high forecast spread, so high spread appears in several parts of the selected area.`;
+  }
+
+  return `${highSpreadCellCount} of ${gridCellCount} cells have high forecast spread, so high spread is concentrated in a smaller part of the selected area.`;
+}
+
 function getPlanningClassLabel(feature: GeoJSON.Feature): string {
   const exposureProbability = getNumberProp(feature, "exposure_probability");
   const normalizedUncertainty = getNumberProp(feature, "normalized_uncertainty");
@@ -112,14 +140,14 @@ function getPlanningClassLabel(feature: GeoJSON.Feature): string {
   );
 
   const exposure = exposureProbability ?? 0;
-  const uncertainty = normalizedUncertainty ?? 0;
+  const forecastSpread = normalizedUncertainty ?? 0;
   const expectedExposed = expectedExposedPopulation ?? 0;
 
-  if (exposure >= 0.75 && uncertainty >= 0.6) {
+  if (exposure >= 0.75 && forecastSpread >= 0.6) {
     return "Urgent data-gap zone";
   }
 
-  if (exposure >= 0.5 && uncertainty >= 0.6) {
+  if (exposure >= 0.5 && forecastSpread >= 0.6) {
     return "Data-gap priority";
   }
 
@@ -127,8 +155,8 @@ function getPlanningClassLabel(feature: GeoJSON.Feature): string {
     return "Population priority zone";
   }
 
-  if (exposure >= 0.35 && uncertainty >= 0.6) {
-    return "Uncertain monitoring zone";
+  if (exposure >= 0.35 && forecastSpread >= 0.6) {
+    return "High-spread monitoring zone";
   }
 
   if (expectedExposed >= 2000) {
@@ -140,15 +168,19 @@ function getPlanningClassLabel(feature: GeoJSON.Feature): string {
 
 function buildHeatInterpretation({
   meanExposureProbability,
-  highRiskCellCount,
-  highRiskHighUncertaintyCellCount,
+  highExposureCellCount,
+  highSpreadCellCount,
+  highExposureHighSpreadCellCount,
+  gridCellCount,
   exposedAssetCount,
   assetCount,
   showInfrastructureAssets,
 }: {
   meanExposureProbability: number | null;
-  highRiskCellCount: number;
-  highRiskHighUncertaintyCellCount: number;
+  highExposureCellCount: number;
+  highSpreadCellCount: number;
+  highExposureHighSpreadCellCount: number;
+  gridCellCount: number;
   exposedAssetCount: number;
   assetCount: number;
   showInfrastructureAssets: boolean;
@@ -161,18 +193,23 @@ function buildHeatInterpretation({
           meanExposureProbability * 100
         ).toFixed(0)}%`;
 
-  const uncertaintyText =
-    highRiskHighUncertaintyCellCount > 0
-      ? `${highRiskHighUncertaintyCellCount} cells are both high-risk and high-uncertainty`
-      : highRiskCellCount > 0
-        ? `${highRiskCellCount} cells are high-risk`
-        : "no cells are currently classified as high-risk";
+  const exposureText =
+    highExposureHighSpreadCellCount > 0
+      ? `${highExposureHighSpreadCellCount} cells have both high exposure and high forecast spread`
+      : highExposureCellCount > 0
+        ? `${highExposureCellCount} cells have high exposure`
+        : "no cells are currently classified as high exposure";
+
+  const spreadText = getForecastSpreadSummaryText({
+    gridCellCount,
+    highSpreadCellCount,
+  });
 
   const assetText = showInfrastructureAssets
     ? `, with ${exposedAssetCount} of ${assetCount} visible infrastructure assets exposed`
     : "";
 
-  return `This area has ${exposureLabel} heat exposure, with ${meanExposureText}; ${uncertaintyText}${assetText}.`;
+  return `This area has ${exposureLabel} heat exposure, with ${meanExposureText}; ${exposureText}${assetText}. ${spreadText}`;
 }
 
 function buildPopulationInterpretation({
@@ -196,10 +233,10 @@ function buildPopulationInterpretation({
 
   const urgentText =
     urgentDataGapCellCount > 0
-      ? ` ${urgentDataGapCellCount} cells are urgent data-gap zones because exposure probability and uncertainty are both high.`
+      ? ` ${urgentDataGapCellCount} cells are urgent data-gap zones because exposure probability and forecast spread are both high.`
       : " No cells are currently classified as urgent, but high-population monitoring zones may still need attention.";
 
-  return `About ${expectedText} of ${totalText} people are expected to experience heat above ${thresholdText} in this area.${urgentText}`;
+  return `The expected exposed population is about ${expectedText} people out of ${totalText} at the ${thresholdText} threshold. This is calculated as population × exposure probability, not as a confirmed observed count.${urgentText}`;
 }
 
 function getMean(values: number[]): number | null {
@@ -274,7 +311,7 @@ const SpatialQueryPanel = ({
       .map((feature) => getNumberProp(feature, "exposure_probability"))
       .filter((value): value is number => value !== null);
 
-    const uncertaintyDeltas = manualRiskGrid
+    const forecastSpreadDeltas = manualRiskGrid
       .map((feature) => getNumberProp(feature, "heat_uncertainty_delta"))
       .filter((value): value is number => value !== null);
 
@@ -282,25 +319,25 @@ const SpatialQueryPanel = ({
       .map((feature) => getNumberProp(feature, "heat_mean"))
       .filter((value): value is number => value !== null);
 
-    const highRiskCells = manualRiskGrid.filter((feature) => {
+    const highExposureCells = manualRiskGrid.filter((feature) => {
       const probability = getNumberProp(feature, "exposure_probability");
       return probability !== null && probability >= 0.75;
     });
 
-    const highUncertaintyCells = manualRiskGrid.filter((feature) => {
-      const uncertainty = getNumberProp(feature, "heat_uncertainty_delta");
-      return uncertainty !== null && uncertainty >= 4;
+    const highSpreadCells = manualRiskGrid.filter((feature) => {
+      const forecastSpread = getNumberProp(feature, "heat_uncertainty_delta");
+      return forecastSpread !== null && forecastSpread >= 4;
     });
 
-    const highRiskHighUncertaintyCells = manualRiskGrid.filter((feature) => {
+    const highExposureHighSpreadCells = manualRiskGrid.filter((feature) => {
       const probability = getNumberProp(feature, "exposure_probability");
-      const uncertainty = getNumberProp(feature, "heat_uncertainty_delta");
+      const forecastSpread = getNumberProp(feature, "heat_uncertainty_delta");
 
       return (
         probability !== null &&
-        uncertainty !== null &&
+        forecastSpread !== null &&
         probability >= 0.75 &&
-        uncertainty >= 4
+        forecastSpread >= 4
       );
     });
 
@@ -329,12 +366,12 @@ const SpatialQueryPanel = ({
       exposedAssetCount: exposedAssets.length,
       meanExposureProbability: getMean(exposureProbabilities),
       maxExposureProbability: getMax(exposureProbabilities),
-      meanUncertaintyDelta: getMean(uncertaintyDeltas),
-      maxUncertaintyDelta: getMax(uncertaintyDeltas),
+      meanUncertaintyDelta: getMean(forecastSpreadDeltas),
+      maxUncertaintyDelta: getMax(forecastSpreadDeltas),
       meanHeat: getMean(heatMeans),
-      highRiskCellCount: highRiskCells.length,
-      highUncertaintyCellCount: highUncertaintyCells.length,
-      highRiskHighUncertaintyCellCount: highRiskHighUncertaintyCells.length,
+      highRiskCellCount: highExposureCells.length,
+      highUncertaintyCellCount: highSpreadCells.length,
+      highRiskHighUncertaintyCellCount: highExposureHighSpreadCells.length,
       topAssetName: topAsset ? getStringProp(topAsset, "asset_name") : null,
       topAssetType: topAsset ? getStringProp(topAsset, "asset_type") : null,
     };
@@ -359,16 +396,16 @@ const SpatialQueryPanel = ({
         feature,
         "exposure_probability"
       );
-      const normalizedUncertainty = getNumberProp(
+      const normalizedForecastSpread = getNumberProp(
         feature,
         "normalized_uncertainty"
       );
 
       return (
         exposureProbability !== null &&
-        normalizedUncertainty !== null &&
+        normalizedForecastSpread !== null &&
         exposureProbability >= 0.75 &&
-        normalizedUncertainty >= 0.6
+        normalizedForecastSpread >= 0.6
       );
     });
 
@@ -537,7 +574,7 @@ const SpatialQueryPanel = ({
                 Heat Exposure
               </div>
               <div className="text-[10px] font-medium text-neutral-400">
-                Exposure probability and forecast uncertainty
+                Exposure probability and cell-level forecast spread
               </div>
               <div className="mt-1 inline-flex rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
                 Threshold: {formatTemp(manualRiskSummary.threshold)}
@@ -548,13 +585,25 @@ const SpatialQueryPanel = ({
               {buildHeatInterpretation({
                 meanExposureProbability:
                   manualRiskSummary.meanExposureProbability,
-                highRiskCellCount: manualRiskSummary.highRiskCellCount,
-                highRiskHighUncertaintyCellCount:
+                highExposureCellCount: manualRiskSummary.highRiskCellCount,
+                highSpreadCellCount:
+                  manualRiskSummary.highUncertaintyCellCount,
+                highExposureHighSpreadCellCount:
                   manualRiskSummary.highRiskHighUncertaintyCellCount,
+                gridCellCount: manualRiskSummary.gridCellCount,
                 exposedAssetCount: manualRiskSummary.exposedAssetCount,
                 assetCount: manualRiskSummary.assetCount,
                 showInfrastructureAssets,
               })}
+            </div>
+
+            <div className="mb-3 rounded-xl bg-neutral-50 p-2 text-[10px] leading-relaxed text-neutral-600">
+              <span className="font-bold text-neutral-800">
+                Forecast spread is cell-level.
+              </span>{" "}
+              It is calculated separately for each grid cell from the range of
+              short-term heat estimates. The summary below shows whether high
+              spread is localized or widespread across the selected area.
             </div>
 
             {queryMetadata?.provenance?.data_sources && (
@@ -620,7 +669,7 @@ const SpatialQueryPanel = ({
 
               <div className="rounded-lg bg-purple-50 p-2">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-500">
-                  Mean spread
+                  Mean forecast spread
                 </div>
                 <div className="text-base font-bold text-purple-700">
                   {formatTemp(manualRiskSummary.meanUncertaintyDelta)}
@@ -631,21 +680,26 @@ const SpatialQueryPanel = ({
             <div className="mt-3 space-y-1.5 text-xs text-neutral-600">
               <p>
                 <span className="font-semibold text-neutral-800">
-                  High-risk cells:
+                  High-exposure cells:
                 </span>{" "}
                 {manualRiskSummary.highRiskCellCount}
               </p>
               <p>
                 <span className="font-semibold text-neutral-800">
-                  High-uncertainty cells:
+                  High-spread cells:
                 </span>{" "}
-                {manualRiskSummary.highUncertaintyCellCount}
+                {manualRiskSummary.highUncertaintyCellCount} /{" "}
+                {manualRiskSummary.gridCellCount}
               </p>
               <p>
                 <span className="font-semibold text-neutral-800">
-                  High-risk + high-uncertainty:
+                  High exposure + high spread:
                 </span>{" "}
                 {manualRiskSummary.highRiskHighUncertaintyCellCount}
+              </p>
+              <p className="text-[10px] leading-snug text-neutral-500">
+                High-spread cells currently mean cells with forecast spread of
+                at least 4.0°C.
               </p>
 
               {showInfrastructureAssets && (
@@ -752,10 +806,21 @@ const SpatialQueryPanel = ({
             <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3">
               <div className="mb-2">
                 <div className="text-sm font-bold text-purple-900">
-                  Population Affected
+                  Expected Exposed Population
                 </div>
                 <div className="text-[10px] font-medium text-purple-500">
                   WorldPop overlay on the heat-exposure grid
+                </div>
+              </div>
+
+              <div className="mb-3 rounded-xl bg-white/80 p-2 text-xs leading-relaxed text-purple-900">
+                <div className="font-semibold">
+                  Expected exposed people = population estimate × chance of
+                  crossing the selected heat threshold.
+                </div>
+                <div className="mt-1 text-[10px] leading-relaxed text-purple-700">
+                  This is an expected value, not a confirmed count of individual
+                  people exposed.
                 </div>
               </div>
 
@@ -782,7 +847,7 @@ const SpatialQueryPanel = ({
 
                 <div className="rounded-lg bg-white/80 p-2">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-400">
-                    Expected exposed
+                    Expected exposed people
                   </div>
                   <div className="text-base font-bold text-purple-950">
                     {formatCount(
@@ -793,7 +858,7 @@ const SpatialQueryPanel = ({
 
                 <div className="rounded-lg bg-white/80 p-2">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-400">
-                    Exposure share
+                    Expected share
                   </div>
                   <div className="text-base font-bold text-purple-950">
                     {formatPercent(populationOverlaySummary.exposurePercent)}
@@ -817,7 +882,7 @@ const SpatialQueryPanel = ({
                 </p>
                 <p>
                   <span className="font-semibold">
-                    High-priority exposed population:
+                    High-priority expected exposed population:
                   </span>{" "}
                   {formatCount(populationOverlaySummary.highPriorityPopulation)}
                 </p>
@@ -830,8 +895,8 @@ const SpatialQueryPanel = ({
                       Priority zones
                     </div>
                     <div className="text-[10px] leading-snug text-purple-700">
-                      Ranked by expected exposed population, with uncertainty
-                      used as a planning signal.
+                      Ranked by expected exposed population, with forecast
+                      spread used as a planning signal.
                     </div>
                   </div>
 
@@ -851,7 +916,7 @@ const SpatialQueryPanel = ({
                           feature,
                           "exposure_probability"
                         );
-                        const uncertaintyDelta = getNumberProp(
+                        const forecastSpread = getNumberProp(
                           feature,
                           "heat_uncertainty_delta"
                         );
@@ -889,7 +954,9 @@ const SpatialQueryPanel = ({
                                 {formatCount(population)}
                               </div>
                               <div>
-                                <span className="font-semibold">Exposed:</span>{" "}
+                                <span className="font-semibold">
+                                  Expected exposed:
+                                </span>{" "}
                                 {formatCount(expectedExposed)}
                               </div>
                               <div>
@@ -899,8 +966,10 @@ const SpatialQueryPanel = ({
                                 {formatPercent(exposureProbability)}
                               </div>
                               <div>
-                                <span className="font-semibold">Spread:</span>{" "}
-                                {formatTemp(uncertaintyDelta)}
+                                <span className="font-semibold">
+                                  Forecast spread:
+                                </span>{" "}
+                                {formatTemp(forecastSpread)}
                               </div>
                             </div>
 
@@ -922,15 +991,16 @@ const SpatialQueryPanel = ({
                 onClick={() => handleDownload("Population Exposure Overlay")}
                 className="mt-3 rounded-lg bg-purple-600 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-purple-700"
               >
-                Download population overlay
+                Download expected exposed population
               </button>
             </div>
           )}
 
           {hasPopulationOverlay && !showPopulationOverlay && (
             <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs leading-relaxed text-purple-900">
-              Population exposure data is available. Turn on the population
-              overlay in the map legend to show exposed-population metrics.
+              Expected exposed population data is available. Turn on the
+              population overlay in the map legend to show values calculated as
+              population × exposure probability.
             </div>
           )}
 

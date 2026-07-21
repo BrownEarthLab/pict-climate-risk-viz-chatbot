@@ -82,7 +82,7 @@ function normalizeInterpretation(value) {
     plain_language_summary:
       typeof value?.plain_language_summary === "string"
         ? value.plain_language_summary
-        : "The selected area was analyzed for heat exposure, population affected, and infrastructure exposure.",
+        : "The selected area was analyzed for heat exposure, expected exposed population, and infrastructure exposure.",
     key_findings: getArray(value?.key_findings).map(String).slice(0, 6),
     uncertainty_notes: getArray(value?.uncertainty_notes).map(String).slice(0, 5),
     recommended_next_steps: getArray(value?.recommended_next_steps)
@@ -107,11 +107,11 @@ function buildFallbackInterpretation(resultSummary) {
   const hasAssets = infrastructureAssets !== null;
 
   const populationSentence = hasPopulation
-    ? ` About ${formatCount(
+    ? ` The expected exposed population is about ${formatCount(
         population.expected_exposed_population
-      )} of ${formatCount(
+      )} people out of ${formatCount(
         population.total_population
-      )} people are expected to experience heat above this threshold.`
+      )}. This is calculated as population × exposure probability, not as a confirmed observed count.`
     : "";
 
   const assetSentence = hasAssets
@@ -130,8 +130,8 @@ function buildFallbackInterpretation(resultSummary) {
       hasPopulation
         ? `Expected exposed population is ${formatCount(
             population.expected_exposed_population
-          )}.`
-        : "Population overlay was not included in the current visible interpretation.",
+          )}, calculated as population × exposure probability.`
+        : "Expected exposed population was not included in the current visible interpretation.",
       hasAssets
         ? `${formatCount(
             infrastructureAssets.exposed_asset_count
@@ -149,12 +149,12 @@ function buildFallbackInterpretation(resultSummary) {
     ],
     recommended_next_steps: [
       "Rerun the same area at 24°C and 26°C to test threshold sensitivity.",
-      "Inspect the highest population priority zones before making planning decisions.",
+      "Inspect the highest expected exposed population priority zones before making planning decisions.",
       "Compare this screening result with longer-term climate projection data when available.",
     ],
     data_limitations: [
       "Heat exposure currently uses short-term Open-Meteo forecast data, not long-term climate projections.",
-      "Population exposure uses WorldPop population counts.",
+      "Expected exposed population uses WorldPop population counts multiplied by exposure probability.",
       "Infrastructure assets come from OpenStreetMap / Overpass and may be incomplete.",
     ],
   };
@@ -171,6 +171,8 @@ Rules:
 - Do not claim this is a final planning decision.
 - Say that this is a screening-level estimate.
 - Mention that heat exposure uses short-term Open-Meteo forecast data, not long-term climate projections.
+- If population data is included, say that expected exposed population is calculated as population estimate × exposure probability.
+- If population data is included, make clear that expected exposed population is an expected value, not a confirmed observed count of individual people.
 - Mention that population exposure uses WorldPop if population data is included.
 - Mention that infrastructure assets come from OpenStreetMap / Overpass if assets are included.
 - Keep the language plain, practical, and concise.
@@ -185,6 +187,10 @@ function buildUserPrompt(resultSummary) {
 Interpret this compact heat-exposure result summary.
 
 Return only the structured JSON object requested by the schema.
+
+Important interpretation note:
+- "Expected exposed population" means population estimate multiplied by exposure probability.
+- It is not a confirmed observed count of individual exposed people.
 
 Result summary:
 ${JSON.stringify(resultSummary, null, 2)}

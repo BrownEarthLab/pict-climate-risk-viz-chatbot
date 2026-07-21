@@ -11,7 +11,7 @@ interface FeatureHighlighterProps {
 const DEFAULT_LAYER_DISPLAY_NAMES: Record<string, string> = {
   "Manual Heat Risk": "Heat Exposure Grid",
   "Manual Heat Risk Assets": "Infrastructure Assets",
-  "Population Exposure Overlay": "Population Affected",
+  "Population Exposure Overlay": "Expected Exposed Population",
   "Near-Surface Air Temp (TAS)": "Near-Surface Air Temperature",
   "Annual Mean Wet-Bulb (WBT)": "Annual Mean Wet-Bulb Temperature",
 };
@@ -77,16 +77,16 @@ function getPopulationPlanningClassLabel(
 ): string {
   const exposureProbability =
     getNumberProp(properties, "exposure_probability") ?? 0;
-  const normalizedUncertainty =
+  const normalizedForecastSpread =
     getNumberProp(properties, "normalized_uncertainty") ?? 0;
   const expectedExposedPopulation =
     getNumberProp(properties, "expected_exposed_population") ?? 0;
 
-  if (exposureProbability >= 0.75 && normalizedUncertainty >= 0.6) {
+  if (exposureProbability >= 0.75 && normalizedForecastSpread >= 0.6) {
     return "Urgent data-gap zone";
   }
 
-  if (exposureProbability >= 0.5 && normalizedUncertainty >= 0.6) {
+  if (exposureProbability >= 0.5 && normalizedForecastSpread >= 0.6) {
     return "Data-gap priority";
   }
 
@@ -94,8 +94,8 @@ function getPopulationPlanningClassLabel(
     return "Population priority zone";
   }
 
-  if (exposureProbability >= 0.35 && normalizedUncertainty >= 0.6) {
-    return "Uncertain monitoring zone";
+  if (exposureProbability >= 0.35 && normalizedForecastSpread >= 0.6) {
+    return "High-spread monitoring zone";
   }
 
   if (expectedExposedPopulation >= 2000) {
@@ -110,28 +110,35 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
 
   if (layerName === "Population Exposure Overlay") {
     return `
-      <div class="min-w-[220px] font-sans">
+      <div class="min-w-[240px] font-sans">
         <div class="mb-1 text-xs font-bold text-neutral-900">
-          Population affected
+          Expected exposed population
         </div>
         <div class="space-y-0.5 text-[11px] text-neutral-700">
-          <div><strong>Population:</strong> ${formatNumber(
+          <div><strong>Population estimate:</strong> ${formatNumber(
             properties.population_estimate,
-            0
-          )}</div>
-          <div><strong>Expected exposed:</strong> ${formatNumber(
-            properties.expected_exposed_population,
             0
           )}</div>
           <div><strong>Exposure probability:</strong> ${formatPercent(
             properties.exposure_probability
           )}</div>
-          <div><strong>Priority:</strong> ${cleanLabel(
+          <div><strong>Expected exposed people:</strong> ${formatNumber(
+            properties.expected_exposed_population,
+            0
+          )}</div>
+          <div><strong>Method:</strong> population × probability</div>
+          <div><strong>Forecast spread:</strong> ${formatNumber(
+            properties.heat_uncertainty_delta
+          )}°C</div>
+          <div><strong>Priority score class:</strong> ${cleanLabel(
             properties.priority_category
           )}</div>
           <div><strong>Planning class:</strong> ${getPopulationPlanningClassLabel(
             properties
           )}</div>
+        </div>
+        <div class="mt-1 border-t border-neutral-100 pt-1 text-[10px] leading-snug text-neutral-500">
+          Expected exposed people is an expected value, not a confirmed observed count.
         </div>
       </div>
     `;
@@ -153,9 +160,10 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>P10 / P90:</strong> ${formatNumber(
             properties.heat_p10
           )}°C / ${formatNumber(properties.heat_p90)}°C</div>
-          <div><strong>Uncertainty spread:</strong> ${formatNumber(
+          <<div><strong>Forecast spread:</strong> ${formatNumber(
             properties.heat_uncertainty_delta
           )}°C</div>
+          <div><strong>Spread method:</strong> P90 - P10 heat estimate</div>
         </div>
       </div>
     `;
@@ -427,15 +435,17 @@ const FeatureHighlighter = ({
             0,
           ],
           0,
-          "#3b82f6",
-          0.25,
-          "#86efac",
-          0.5,
-          "#fde047",
-          0.75,
+          "#fff7ed",
+          0.2,
+          "#ffedd5",
+          0.4,
+          "#fdba74",
+          0.6,
           "#fb923c",
+          0.8,
+          "#ea580c",
           1,
-          "#ef4444",
+          "#7c2d12",
         ],
         "fill-opacity": [
           "interpolate",
@@ -471,11 +481,11 @@ const FeatureHighlighter = ({
           ["linear"],
           ["coalesce", ["get", "heat_uncertainty_delta"], 0],
           0,
-          "rgba(255,255,255,0.15)",
+          "rgba(255,255,255,0.2)",
           3,
-          "rgba(245,158,11,0.45)",
+          "rgba(120,113,108,0.45)",
           6,
-          "rgba(124,45,18,0.8)",
+          "rgba(41,37,36,0.75)",
         ],
         "line-width": [
           "interpolate",
@@ -521,16 +531,22 @@ const FeatureHighlighter = ({
           ["coalesce", ["get", "expected_exposed_population"], 0],
           0,
           0,
-          100,
+          250,
           2.5,
-          500,
-          4.5,
-          1500,
-          7,
+          1000,
+          5,
           3000,
-          10,
+          8,
           6000,
-          13,
+          11,
+          10000,
+          14,
+          15000,
+          17,
+          25000,
+          21,
+          40000,
+          25,
         ],
         "circle-color": "#8b5cf6",
         "circle-opacity": [
@@ -539,14 +555,18 @@ const FeatureHighlighter = ({
           ["coalesce", ["get", "expected_exposed_population"], 0],
           0,
           0,
-          100,
-          0.25,
-          500,
-          0.38,
-          1500,
-          0.5,
+          250,
+          0.22,
+          1000,
+          0.34,
           3000,
-          0.62,
+          0.46,
+          6000,
+          0.56,
+          15000,
+          0.66,
+          40000,
+          0.72,
         ],
         "circle-blur": 0.12,
         "circle-stroke-color": [
