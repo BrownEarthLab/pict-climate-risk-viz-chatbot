@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { SpatialQueryMetadata } from "../../hooks/useSpatialQuery";
-import ResultInterpreterPanel from "./ResultInterpreterPanel";
 
 interface SpatialQueryPanelProps {
   highlightedFeatures: GeoJSON.Feature[] | null;
@@ -15,244 +14,208 @@ interface GroupedFeatures {
 }
 
 const DEFAULT_LAYER_DISPLAY_NAMES: Record<string, string> = {
-  "Manual Heat Risk": "Heat Exposure Grid",
-  "Manual Heat Risk Assets": "Infrastructure Assets",
-  "Population Exposure Overlay": "Expected Exposed Population",
-  "Near-Surface Air Temp (TAS)": "Near-Surface Air Temperature",
-  "Annual Mean Wet-Bulb (WBT)": "Annual Mean Wet-Bulb Temperature",
+  "Manual Heat Risk": "Heat exposure grid",
+  "Manual Heat Risk Assets": "Infrastructure assets",
+  "Population Exposure Overlay": "Expected exposed population",
+  "Near-Surface Air Temp (TAS)": "Near-surface air temperature",
+  "Annual Mean Wet-Bulb (WBT)": "Annual mean wet-bulb",
 };
 
 function getFeatureLayerName(feature: GeoJSON.Feature): string {
   return String(feature.properties?.layer_name || "unknown_layer");
 }
 
-function getReadableAnalysisChain({
-  showPopulationOverlay,
-  showInfrastructureAssets,
-}: {
-  showPopulationOverlay: boolean;
-  showInfrastructureAssets: boolean;
-}): string[] {
-  const steps = [
-    "Generate a spatial grid inside the drawn boundary.",
-    "Fetch short-term heat forecast values at each grid cell.",
-    "Estimate exposure probability and cell-level forecast spread for each cell.",
-  ];
+function getNumber(value: unknown): number | null {
+  const numberValue = Number(value);
 
-  if (showPopulationOverlay) {
-    steps.push(
-      "Overlay WorldPop population counts on the heat-exposure grid.",
-      "Calculate expected exposed population as population × exposure probability.",
-      "Rank population priority zones using expected exposed population and forecast spread."
-    );
-  }
-
-  if (showInfrastructureAssets) {
-    steps.push(
-      "Retrieve hospitals, schools, and ports from OpenStreetMap through Overpass.",
-      "Sample each asset against the nearest heat-exposure cell.",
-      "Rank infrastructure assets by sampled heat exposure."
-    );
-  }
-
-  return steps;
+  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
-function getStringProp(feature: GeoJSON.Feature, key: string): string | null {
-  const value = feature.properties?.[key];
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const numberValue = getNumber(value);
 
-  if (value === null || value === undefined) return null;
+    if (numberValue !== null) return numberValue;
+  }
+
+  return null;
+}
+
+function formatPercent(value: unknown): string {
+  const numberValue = getNumber(value);
+
+  if (numberValue === null) return "—";
+
+  return `${Math.round(numberValue * 100)}%`;
+}
+
+function formatTemp(value: unknown): string {
+  const numberValue = getNumber(value);
+
+  if (numberValue === null) return "—";
+
+  return `${numberValue.toFixed(1)}°C`;
+}
+
+function formatCount(value: unknown): string {
+  const numberValue = getNumber(value);
+
+  if (numberValue === null) return "—";
+
+  return Math.round(numberValue).toLocaleString();
+}
+
+function formatCompactCount(value: unknown): string {
+  const numberValue = getNumber(value);
+
+  if (numberValue === null) return "—";
+
+  return new Intl.NumberFormat("en", {
+    notation: Math.abs(numberValue) >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: Math.abs(numberValue) >= 10_000 ? 1 : 0,
+  }).format(numberValue);
+}
+
+function getProp(feature: GeoJSON.Feature | null | undefined, key: string) {
+  return feature?.properties?.[key];
+}
+
+function getNumberProp(feature: GeoJSON.Feature | null | undefined, key: string) {
+  return getNumber(getProp(feature, key));
+}
+
+function getStringProp(
+  feature: GeoJSON.Feature | null | undefined,
+  key: string
+): string | null {
+  const value = getProp(feature, key);
+
+  if (value === null || value === undefined || value === "") return null;
 
   return String(value);
 }
 
-function getNumberProp(feature: GeoJSON.Feature, key: string): number | null {
-  const value = Number(feature.properties?.[key]);
-
-  return Number.isFinite(value) ? value : null;
-}
-
-function getBooleanProp(feature: GeoJSON.Feature, key: string): boolean {
-  return feature.properties?.[key] === true;
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null) return "N/A";
-
-  return `${(value * 100).toFixed(0)}%`;
-}
-
-function formatTemp(value: number | null): string {
-  if (value === null) return "N/A";
-
-  return `${value.toFixed(1)}°C`;
-}
-
-function formatCount(value: number | null): string {
-  if (value === null) return "N/A";
-
-  return Math.round(value).toLocaleString();
-}
-
-function getExposureLabel(probability: number | null): string {
-  if (probability === null) return "unknown";
-
-  if (probability >= 0.75) return "high";
-  if (probability >= 0.5) return "moderate-to-high";
-  if (probability >= 0.25) return "moderate";
-  return "low";
-}
-
-function getForecastSpreadSummaryText({
-  gridCellCount,
-  highSpreadCellCount,
-}: {
-  gridCellCount: number;
-  highSpreadCellCount: number;
-}): string {
-  if (gridCellCount === 0) {
-    return "Forecast spread is calculated at the grid-cell level, but no heat grid cells are available.";
-  }
-
-  if (highSpreadCellCount === 0) {
-    return `0 of ${gridCellCount} cells have high forecast spread, so high spread is not currently widespread in the selected area.`;
-  }
-
-  const share = highSpreadCellCount / gridCellCount;
-
-  if (share >= 0.8) {
-    return `${highSpreadCellCount} of ${gridCellCount} cells have high forecast spread, so high spread appears across most of the selected area.`;
-  }
-
-  if (share >= 0.3) {
-    return `${highSpreadCellCount} of ${gridCellCount} cells have high forecast spread, so high spread appears in several parts of the selected area.`;
-  }
-
-  return `${highSpreadCellCount} of ${gridCellCount} cells have high forecast spread, so high spread is concentrated in a smaller part of the selected area.`;
-}
-
-function getPlanningClassLabel(feature: GeoJSON.Feature): string {
-  const exposureProbability = getNumberProp(feature, "exposure_probability");
-  const normalizedUncertainty = getNumberProp(feature, "normalized_uncertainty");
-  const expectedExposedPopulation = getNumberProp(
-    feature,
-    "expected_exposed_population"
+function getFeatureSummary(
+  highlightedFeatures: GeoJSON.Feature[] | null,
+  queryMetadata?: SpatialQueryMetadata | null
+) {
+  const features = highlightedFeatures ?? [];
+  const riskGrid = features.filter(
+    (feature) =>
+      feature.properties?.layer_name === "Manual Heat Risk" ||
+      feature.properties?.feature_role === "risk_grid"
+  );
+  const assets = features.filter(
+    (feature) => feature.properties?.layer_name === "Manual Heat Risk Assets"
+  );
+  const population = features.filter(
+    (feature) =>
+      feature.properties?.layer_name === "Population Exposure Overlay"
   );
 
-  const exposure = exposureProbability ?? 0;
-  const forecastSpread = normalizedUncertainty ?? 0;
-  const expectedExposed = expectedExposedPopulation ?? 0;
+  const exposureValues = riskGrid
+    .map((feature) => getNumberProp(feature, "exposure_probability"))
+    .filter((value): value is number => value !== null);
 
-  if (exposure >= 0.75 && forecastSpread >= 0.6) {
-    return "Urgent data-gap zone";
-  }
+  const spreadValues = riskGrid
+    .map((feature) =>
+      firstNumber(
+        feature.properties?.forecast_spread,
+        feature.properties?.heat_uncertainty_delta
+      )
+    )
+    .filter((value): value is number => value !== null);
 
-  if (exposure >= 0.5 && forecastSpread >= 0.6) {
-    return "Data-gap priority";
-  }
+  const heatValues = riskGrid
+    .map((feature) => getNumberProp(feature, "heat_mean"))
+    .filter((value): value is number => value !== null);
 
-  if (expectedExposed >= 5000 && exposure >= 0.35) {
-    return "Population priority zone";
-  }
+  const mean = (values: number[]) =>
+    values.length === 0
+      ? null
+      : values.reduce((sum, value) => sum + value, 0) / values.length;
 
-  if (exposure >= 0.35 && forecastSpread >= 0.6) {
-    return "High-spread monitoring zone";
-  }
+  const topAsset =
+    assets.find((feature) => feature.properties?.focus_asset === true) ||
+    assets.find((feature) => getNumberProp(feature, "asset_rank") === 1) ||
+    assets[0] ||
+    null;
 
-  if (expectedExposed >= 2000) {
-    return "Population monitoring zone";
-  }
+  const exposedAssets = assets.filter(
+    (feature) => feature.properties?.exposed_to_hazard === true
+  );
 
-  return "Lower priority zone";
-}
+  return {
+    riskGrid,
+    assets,
+    population,
+    topAsset,
+    gridCellCount:
+      firstNumber(queryMetadata?.h3_cell_count, queryMetadata?.grid_cell_count) ??
+      riskGrid.length,
+    meanExposure:
+      firstNumber(queryMetadata?.mean_exposure_probability) ??
+      mean(exposureValues),
+    maxExposure:
+      firstNumber(queryMetadata?.max_exposure_probability) ??
+      (exposureValues.length > 0 ? Math.max(...exposureValues) : null),
+    meanSpread:
+      firstNumber(queryMetadata?.mean_forecast_spread) ?? mean(spreadValues),
+    maxSpread:
+      firstNumber(queryMetadata?.max_forecast_spread) ??
+      (spreadValues.length > 0 ? Math.max(...spreadValues) : null),
+    meanHeat: firstNumber(queryMetadata?.mean_heat) ?? mean(heatValues),
+    highRiskCellCount:
+      firstNumber(queryMetadata?.high_risk_cell_count) ??
+      riskGrid.filter(
+        (feature) => (getNumberProp(feature, "exposure_probability") ?? 0) >= 0.5
+      ).length,
+    highSpreadCellCount:
+      firstNumber(queryMetadata?.high_spread_cell_count) ??
+      riskGrid.filter(
+        (feature) =>
+          firstNumber(
+            feature.properties?.normalized_forecast_spread,
+            feature.properties?.normalized_uncertainty
+          ) !== null &&
+          (firstNumber(
+            feature.properties?.normalized_forecast_spread,
+            feature.properties?.normalized_uncertainty
+          ) ?? 0) >= 0.67
+      ).length,
+    highRiskHighSpreadCellCount:
+      firstNumber(queryMetadata?.high_risk_high_spread_cell_count) ??
+      riskGrid.filter((feature) => {
+        const risk = getNumberProp(feature, "exposure_probability") ?? 0;
+        const spread =
+          firstNumber(
+            feature.properties?.normalized_forecast_spread,
+            feature.properties?.normalized_uncertainty
+          ) ?? 0;
 
-function buildHeatInterpretation({
-  meanExposureProbability,
-  highExposureCellCount,
-  highSpreadCellCount,
-  highExposureHighSpreadCellCount,
-  gridCellCount,
-  exposedAssetCount,
-  assetCount,
-  showInfrastructureAssets,
-}: {
-  meanExposureProbability: number | null;
-  highExposureCellCount: number;
-  highSpreadCellCount: number;
-  highExposureHighSpreadCellCount: number;
-  gridCellCount: number;
-  exposedAssetCount: number;
-  assetCount: number;
-  showInfrastructureAssets: boolean;
-}): string {
-  const exposureLabel = getExposureLabel(meanExposureProbability);
-  const meanExposureText =
-    meanExposureProbability === null
-      ? "an unknown average crossing probability"
-      : `a mean crossing probability of ${(
-          meanExposureProbability * 100
-        ).toFixed(0)}%`;
-
-  const exposureText =
-    highExposureHighSpreadCellCount > 0
-      ? `${highExposureHighSpreadCellCount} cells have both high exposure and high forecast spread`
-      : highExposureCellCount > 0
-        ? `${highExposureCellCount} cells have high exposure`
-        : "no cells are currently classified as high exposure";
-
-  const spreadText = getForecastSpreadSummaryText({
-    gridCellCount,
-    highSpreadCellCount,
-  });
-
-  const assetText = showInfrastructureAssets
-    ? `, with ${exposedAssetCount} of ${assetCount} visible infrastructure assets exposed`
-    : "";
-
-  return `This area has ${exposureLabel} heat exposure, with ${meanExposureText}; ${exposureText}${assetText}. ${spreadText}`;
-}
-
-function buildPopulationInterpretation({
-  expectedExposedPopulation,
-  totalPopulation,
-  threshold,
-  urgentDataGapCellCount,
-}: {
-  expectedExposedPopulation: number;
-  totalPopulation: number;
-  threshold: number | null;
-  urgentDataGapCellCount: number;
-}): string {
-  const thresholdText =
-    threshold === null
-      ? "the selected heat threshold"
-      : `${threshold.toFixed(1)}°C`;
-
-  const expectedText = Math.round(expectedExposedPopulation).toLocaleString();
-  const totalText = Math.round(totalPopulation).toLocaleString();
-
-  const urgentText =
-    urgentDataGapCellCount > 0
-      ? ` ${urgentDataGapCellCount} cells are urgent data-gap zones because exposure probability and forecast spread are both high.`
-      : " No cells are currently classified as urgent, but high-population monitoring zones may still need attention.";
-
-  return `The expected exposed population is about ${expectedText} people out of ${totalText} at the ${thresholdText} threshold. This is calculated as population × exposure probability, not as a confirmed observed count.${urgentText}`;
-}
-
-function getMean(values: number[]): number | null {
-  if (values.length === 0) return null;
-
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function getMax(values: number[]): number | null {
-  if (values.length === 0) return null;
-
-  return Math.max(...values);
-}
-
-function getSum(values: number[]): number {
-  return values.reduce((sum, value) => sum + value, 0);
+        return risk >= 0.5 && spread >= 0.67;
+      }).length,
+    expectedExposedPopulation:
+      firstNumber(
+        queryMetadata?.total_expected_exposed_population,
+        queryMetadata?.expected_exposed_population
+      ) ??
+      population.reduce(
+        (sum, feature) =>
+          sum + (getNumberProp(feature, "expected_exposed_population") ?? 0),
+        0
+      ),
+    totalPopulation:
+      firstNumber(queryMetadata?.total_population) ??
+      population.reduce(
+        (sum, feature) => sum + (getNumberProp(feature, "population_estimate") ?? 0),
+        0
+      ),
+    assetCount: firstNumber(queryMetadata?.summary?.asset_count) ?? assets.length,
+    exposedAssetCount:
+      firstNumber(queryMetadata?.summary?.exposed_asset_count) ??
+      exposedAssets.length,
+  };
 }
 
 function buildFeatureCollection(
@@ -269,16 +232,9 @@ function buildFeatureCollection(
 const SpatialQueryPanel = ({
   highlightedFeatures,
   queryMetadata,
-  showPopulationOverlay = false,
-  showInfrastructureAssets = false,
   layerDisplayNames = {},
 }: SpatialQueryPanelProps) => {
-  const [showAnalysisChain, setShowAnalysisChain] = useState(false);
-
-  const displayNames = {
-    ...DEFAULT_LAYER_DISPLAY_NAMES,
-    ...layerDisplayNames,
-  };
+  const [showDetails, setShowDetails] = useState(false);
 
   const groupedFeatures = useMemo<GroupedFeatures>(() => {
     if (!highlightedFeatures || highlightedFeatures.length === 0) {
@@ -297,200 +253,45 @@ const SpatialQueryPanel = ({
     }, {});
   }, [highlightedFeatures]);
 
-  const manualRiskGrid = groupedFeatures["Manual Heat Risk"] || [];
-  const manualRiskAssets = groupedFeatures["Manual Heat Risk Assets"] || [];
-  const populationOverlayCells =
-    groupedFeatures["Population Exposure Overlay"] || [];
+  const summary = useMemo(
+    () => getFeatureSummary(highlightedFeatures, queryMetadata),
+    [highlightedFeatures, queryMetadata]
+  );
 
-  const hasManualRisk =
-    manualRiskGrid.length > 0 || manualRiskAssets.length > 0;
-  const hasPopulationOverlay = populationOverlayCells.length > 0;
+  if ((!highlightedFeatures || highlightedFeatures.length === 0) && !queryMetadata) {
+    return null;
+  }
 
-  const manualRiskSummary = useMemo(() => {
-    const exposureProbabilities = manualRiskGrid
-      .map((feature) => getNumberProp(feature, "exposure_probability"))
-      .filter((value): value is number => value !== null);
+  const isAssetAnalysis = queryMetadata?.analysis_type === "asset_heat_risk";
+  const isHeatAnalysis =
+    queryMetadata?.analysis_type === "manual_heat_risk" || isAssetAnalysis;
 
-    const forecastSpreadDeltas = manualRiskGrid
-      .map((feature) => getNumberProp(feature, "heat_uncertainty_delta"))
-      .filter((value): value is number => value !== null);
+  const matchedAsset = queryMetadata?.matched_asset;
+  const topAssetName =
+    matchedAsset?.asset_name ??
+    getStringProp(summary.topAsset, "asset_name") ??
+    null;
 
-    const heatMeans = manualRiskGrid
-      .map((feature) => getNumberProp(feature, "heat_mean"))
-      .filter((value): value is number => value !== null);
-
-    const highExposureCells = manualRiskGrid.filter((feature) => {
-      const probability = getNumberProp(feature, "exposure_probability");
-      return probability !== null && probability >= 0.75;
-    });
-
-    const highSpreadCells = manualRiskGrid.filter((feature) => {
-      const forecastSpread = getNumberProp(feature, "heat_uncertainty_delta");
-      return forecastSpread !== null && forecastSpread >= 4;
-    });
-
-    const highExposureHighSpreadCells = manualRiskGrid.filter((feature) => {
-      const probability = getNumberProp(feature, "exposure_probability");
-      const forecastSpread = getNumberProp(feature, "heat_uncertainty_delta");
-
-      return (
-        probability !== null &&
-        forecastSpread !== null &&
-        probability >= 0.75 &&
-        forecastSpread >= 4
-      );
-    });
-
-    const exposedAssets = manualRiskAssets.filter((feature) =>
-      getBooleanProp(feature, "exposed_to_hazard")
-    );
-
-    const topAsset =
-      manualRiskAssets.find(
-        (feature) => getNumberProp(feature, "asset_rank") === 1
-      ) ||
-      manualRiskAssets[0] ||
-      null;
-
-    const threshold =
-      manualRiskGrid.length > 0
-        ? getNumberProp(manualRiskGrid[0], "threshold")
-        : manualRiskAssets.length > 0
-          ? getNumberProp(manualRiskAssets[0], "threshold")
-          : null;
-
-    return {
-      threshold,
-      gridCellCount: manualRiskGrid.length,
-      assetCount: manualRiskAssets.length,
-      exposedAssetCount: exposedAssets.length,
-      meanExposureProbability: getMean(exposureProbabilities),
-      maxExposureProbability: getMax(exposureProbabilities),
-      meanUncertaintyDelta: getMean(forecastSpreadDeltas),
-      maxUncertaintyDelta: getMax(forecastSpreadDeltas),
-      meanHeat: getMean(heatMeans),
-      highRiskCellCount: highExposureCells.length,
-      highUncertaintyCellCount: highSpreadCells.length,
-      highRiskHighUncertaintyCellCount: highExposureHighSpreadCells.length,
-      topAssetName: topAsset ? getStringProp(topAsset, "asset_name") : null,
-      topAssetType: topAsset ? getStringProp(topAsset, "asset_type") : null,
-    };
-  }, [manualRiskGrid, manualRiskAssets]);
-
-  const populationOverlaySummary = useMemo(() => {
-    const populationEstimates = populationOverlayCells
-      .map((feature) => getNumberProp(feature, "population_estimate"))
-      .filter((value): value is number => value !== null);
-
-    const expectedExposedValues = populationOverlayCells
-      .map((feature) => getNumberProp(feature, "expected_exposed_population"))
-      .filter((value): value is number => value !== null);
-
-    const highPriorityCells = populationOverlayCells.filter((feature) => {
-      const category = getStringProp(feature, "priority_category");
-      return category === "high" || category === "very_high";
-    });
-
-    const urgentDataGapCells = populationOverlayCells.filter((feature) => {
-      const exposureProbability = getNumberProp(
-        feature,
-        "exposure_probability"
-      );
-      const normalizedForecastSpread = getNumberProp(
-        feature,
-        "normalized_uncertainty"
-      );
-
-      return (
-        exposureProbability !== null &&
-        normalizedForecastSpread !== null &&
-        exposureProbability >= 0.75 &&
-        normalizedForecastSpread >= 0.6
-      );
-    });
-
-    const topPriorityCells = [...populationOverlayCells]
-      .sort((a, b) => {
-        const bExpected = Number(
-          b.properties?.expected_exposed_population || 0
-        );
-        const aExpected = Number(
-          a.properties?.expected_exposed_population || 0
-        );
-
-        const bPriority = Number(b.properties?.priority_score || 0);
-        const aPriority = Number(a.properties?.priority_score || 0);
-
-        return bExpected + bPriority * 500 - (aExpected + aPriority * 500);
-      })
-      .slice(0, 5);
-
-    const topPriorityCell = topPriorityCells[0] || null;
-
-    const totalPopulation = getSum(populationEstimates);
-    const expectedExposedPopulation = getSum(expectedExposedValues);
-
-    const threshold =
-      populationOverlayCells.length > 0
-        ? getNumberProp(populationOverlayCells[0], "threshold")
-        : null;
-
-    return {
-      threshold,
-      cellCount: populationOverlayCells.length,
-      totalPopulation,
-      expectedExposedPopulation,
-      exposurePercent:
-        totalPopulation > 0 ? expectedExposedPopulation / totalPopulation : null,
-      highPriorityCellCount: highPriorityCells.length,
-      urgentDataGapCellCount: urgentDataGapCells.length,
-      highPriorityPopulation: highPriorityCells.reduce(
-        (sum, feature) =>
-          sum + Number(feature.properties?.expected_exposed_population || 0),
-        0
-      ),
-      topCellId: topPriorityCell
-        ? getStringProp(topPriorityCell, "cell_id")
-        : null,
-      topCellPopulation: topPriorityCell
-        ? getNumberProp(topPriorityCell, "population_estimate")
-        : null,
-      topCellExpectedExposed: topPriorityCell
-        ? getNumberProp(topPriorityCell, "expected_exposed_population")
-        : null,
-      topCellPriorityScore: topPriorityCell
-        ? getNumberProp(topPriorityCell, "priority_score")
-        : null,
-      topCellCategory: topPriorityCell
-        ? getStringProp(topPriorityCell, "priority_category")
-        : null,
-      topCellQuadrant: topPriorityCell
-        ? getStringProp(topPriorityCell, "risk_uncertainty_quadrant")
-        : null,
-      topPriorityCells,
-    };
-  }, [populationOverlayCells]);
-
-  const handleDownload = (layerName: string) => {
+  const handleDownloadLayer = (layerName: string) => {
     const features = groupedFeatures[layerName];
 
     if (!features || features.length === 0) return;
 
-    const displayName = displayNames[layerName] || layerName;
+    const displayName =
+      layerDisplayNames[layerName] ||
+      DEFAULT_LAYER_DISPLAY_NAMES[layerName] ||
+      layerName;
     const fileName = displayName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
 
     const metadata: SpatialQueryMetadata = {
       ...queryMetadata,
       exported_layer: layerName,
-      exported_layer_display_name: displayName,
       exported_feature_count: features.length,
     };
 
     const blob = new Blob(
       [JSON.stringify(buildFeatureCollection(features, metadata), null, 2)],
-      {
-        type: "application/geo+json",
-      }
+      { type: "application/geo+json" }
     );
 
     const url = URL.createObjectURL(blob);
@@ -512,7 +313,6 @@ const SpatialQueryPanel = ({
     const metadata: SpatialQueryMetadata = {
       ...queryMetadata,
       exported_layer: "all",
-      exported_layer_display_name: "Full Heat Exposure Analysis",
       exported_feature_count: highlightedFeatures.length,
     };
 
@@ -524,16 +324,16 @@ const SpatialQueryPanel = ({
           2
         ),
       ],
-      {
-        type: "application/geo+json",
-      }
+      { type: "application/geo+json" }
     );
 
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
 
     a.href = url;
-    a.download = "full_heat_exposure_analysis.geojson";
+    a.download = isAssetAnalysis
+      ? "asset_heat_risk_results.geojson"
+      : "spatial_query_results.geojson";
 
     document.body.appendChild(a);
     a.click();
@@ -542,510 +342,279 @@ const SpatialQueryPanel = ({
     URL.revokeObjectURL(url);
   };
 
-  if (!highlightedFeatures || highlightedFeatures.length === 0) return null;
-
   return (
-    <div className="absolute bottom-14 right-3 z-[1000] max-h-[420px] w-[330px] overflow-y-auto rounded-2xl border border-black/5 bg-white/90 p-4 shadow-lg backdrop-blur-md">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="absolute bottom-14 right-3 z-[1000] max-h-[500px] w-[340px] overflow-y-auto rounded-2xl border border-black/5 bg-white/92 p-4 shadow-lg backdrop-blur-md">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h6 className="text-sm font-bold text-neutral-900">
-            Heat Exposure Analysis
-          </h6>
-          <p className="text-[10px] font-medium text-neutral-400">
-            {hasManualRisk
-              ? `${manualRiskGrid.length} heat grid cells`
-              : `${highlightedFeatures.length} returned features`}
+          <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+            {isAssetAnalysis ? "Asset heat risk" : "Analysis results"}
+          </p>
+          <h3 className="mt-1 text-sm font-black leading-tight text-neutral-950">
+            {isAssetAnalysis && topAssetName
+              ? topAssetName
+              : isHeatAnalysis
+                ? "Heat exposure analysis"
+                : "Spatial query results"}
+          </h3>
+          <p className="mt-1 text-[10px] font-medium text-neutral-500">
+            {queryMetadata?.admin_name
+              ? `${queryMetadata.admin_name} · `
+              : ""}
+            {formatCount(summary.gridCellCount)} H3 cells
+            {isAssetAnalysis && queryMetadata?.buffer_km
+              ? ` · ${queryMetadata.buffer_km} km buffer`
+              : ""}
           </p>
         </div>
 
-        <button
-          onClick={handleDownloadAll}
-          className="rounded-lg bg-blue-600 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-700"
-        >
-          Download all
-        </button>
+        {highlightedFeatures && highlightedFeatures.length > 0 && (
+          <button
+            onClick={handleDownloadAll}
+            className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-blue-700"
+          >
+            Download
+          </button>
+        )}
       </div>
 
-      {hasManualRisk ? (
-        <div className="space-y-3">
-          <div className="rounded-xl border border-neutral-100 bg-white p-3">
-            <div className="mb-2">
-              <div className="text-sm font-bold text-neutral-900">
-                Heat Exposure
-              </div>
-              <div className="text-[10px] font-medium text-neutral-400">
-                Exposure probability and cell-level forecast spread
-              </div>
-              <div className="mt-1 inline-flex rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                Threshold: {formatTemp(manualRiskSummary.threshold)}
-              </div>
-            </div>
+      {Array.isArray(queryMetadata?.warnings) &&
+        queryMetadata.warnings.length > 0 && (
+          <div className="mt-3 rounded-xl bg-amber-50 p-3 text-[10px] leading-snug text-amber-800">
+            <p className="font-black uppercase tracking-wide text-amber-600">
+              Notes
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-4">
+              {queryMetadata.warnings.slice(0, 3).map((warning, index) => (
+                <li key={`${warning}-${index}`}>{String(warning)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-            <div className="mb-3 rounded-xl bg-orange-50 p-2 text-xs leading-relaxed text-orange-950">
-              {buildHeatInterpretation({
-                meanExposureProbability:
-                  manualRiskSummary.meanExposureProbability,
-                highExposureCellCount: manualRiskSummary.highRiskCellCount,
-                highSpreadCellCount:
-                  manualRiskSummary.highUncertaintyCellCount,
-                highExposureHighSpreadCellCount:
-                  manualRiskSummary.highRiskHighUncertaintyCellCount,
-                gridCellCount: manualRiskSummary.gridCellCount,
-                exposedAssetCount: manualRiskSummary.exposedAssetCount,
-                assetCount: manualRiskSummary.assetCount,
-                showInfrastructureAssets,
-              })}
-            </div>
-
-            <div className="mb-3 rounded-xl bg-neutral-50 p-2 text-[10px] leading-relaxed text-neutral-600">
-              <span className="font-bold text-neutral-800">
-                Forecast spread is cell-level.
-              </span>{" "}
-              It is calculated separately for each grid cell from the range of
-              short-term heat estimates. The summary below shows whether high
-              spread is localized or widespread across the selected area.
-            </div>
-
-            {queryMetadata?.provenance?.data_sources && (
-              <div className="mb-3 rounded-xl bg-neutral-50 p-2">
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-neutral-400">
-                  Data sources
-                </div>
-                <div className="space-y-0.5 text-[10px] font-medium text-neutral-600">
-                  {queryMetadata.provenance.data_sources.map((source) => (
-                    <div key={source}>• {source}</div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-neutral-50 p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
-                  Grid cells
-                </div>
-                <div className="text-base font-bold text-neutral-900">
-                  {manualRiskSummary.gridCellCount}
-                </div>
-              </div>
-
-              {showInfrastructureAssets && (
-                <div className="rounded-lg bg-neutral-50 p-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
-                    Assets
-                  </div>
-                  <div className="text-base font-bold text-neutral-900">
-                    {manualRiskSummary.assetCount}
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-lg bg-orange-50 p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-orange-500">
-                  Mean exposure
-                </div>
-                <div className="text-base font-bold text-orange-700">
-                  {formatPercent(manualRiskSummary.meanExposureProbability)}
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-red-50 p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-red-500">
-                  Max exposure
-                </div>
-                <div className="text-base font-bold text-red-700">
-                  {formatPercent(manualRiskSummary.maxExposureProbability)}
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-sky-50 p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-500">
-                  Mean heat
-                </div>
-                <div className="text-base font-bold text-sky-700">
-                  {formatTemp(manualRiskSummary.meanHeat)}
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-purple-50 p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-500">
-                  Mean forecast spread
-                </div>
-                <div className="text-base font-bold text-purple-700">
-                  {formatTemp(manualRiskSummary.meanUncertaintyDelta)}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-3 space-y-1.5 text-xs text-neutral-600">
-              <p>
-                <span className="font-semibold text-neutral-800">
-                  High-exposure cells:
-                </span>{" "}
-                {manualRiskSummary.highRiskCellCount}
+      {isAssetAnalysis && matchedAsset && (
+        <div className="mt-3 rounded-xl border border-orange-100 bg-orange-50 p-3">
+          <p className="text-[10px] font-black uppercase tracking-wide text-orange-600">
+            Matched asset
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-orange-400">
+                Risk at asset
               </p>
-              <p>
-                <span className="font-semibold text-neutral-800">
-                  High-spread cells:
-                </span>{" "}
-                {manualRiskSummary.highUncertaintyCellCount} /{" "}
-                {manualRiskSummary.gridCellCount}
+              <p className="text-sm font-black text-orange-900">
+                {formatPercent(matchedAsset.exposure_probability)}
               </p>
-              <p>
-                <span className="font-semibold text-neutral-800">
-                  High exposure + high spread:
-                </span>{" "}
-                {manualRiskSummary.highRiskHighUncertaintyCellCount}
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-orange-400">
+                Mean heat
               </p>
-              <p className="text-[10px] leading-snug text-neutral-500">
-                High-spread cells currently mean cells with forecast spread of
-                at least 4.0°C.
+              <p className="text-sm font-black text-orange-900">
+                {formatTemp(matchedAsset.heat_mean)}
               </p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-orange-400">
+                Spread
+              </p>
+              <p className="text-sm font-black text-orange-900">
+                {formatTemp(matchedAsset.forecast_spread)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-orange-400">
+                Match
+              </p>
+              <p className="text-sm font-black text-orange-900">
+                {formatCount(queryMetadata.match_score)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
-              {showInfrastructureAssets && (
-                <p>
-                  <span className="font-semibold text-neutral-800">
-                    Exposed assets:
-                  </span>{" "}
-                  {manualRiskSummary.exposedAssetCount} /{" "}
-                  {manualRiskSummary.assetCount}
+      {isHeatAnalysis && (
+        <>
+          <div className="mt-3 rounded-xl bg-neutral-50 p-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
+                  Mean risk
                 </p>
-              )}
-
-              {showInfrastructureAssets && manualRiskSummary.topAssetName && (
-                <p>
-                  <span className="font-semibold text-neutral-800">
-                    {manualRiskSummary.exposedAssetCount > 0
-                      ? "Top exposed asset:"
-                      : "Highest-ranked asset:"}
-                  </span>{" "}
-                  {manualRiskSummary.topAssetName}
-                  {manualRiskSummary.topAssetType
-                    ? ` (${manualRiskSummary.topAssetType})`
-                    : ""}
+                <p className="text-sm font-black text-neutral-950">
+                  {formatPercent(summary.meanExposure)}
                 </p>
-              )}
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {manualRiskGrid.length > 0 && (
-                <button
-                  onClick={() => handleDownload("Manual Heat Risk")}
-                  className="rounded-lg bg-neutral-900 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-neutral-700"
-                >
-                  Download heat grid
-                </button>
-              )}
-
-              {showInfrastructureAssets && manualRiskAssets.length > 0 && (
-                <button
-                  onClick={() => handleDownload("Manual Heat Risk Assets")}
-                  className="rounded-lg bg-blue-600 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-700"
-                >
-                  Download assets
-                </button>
-              )}
-            </div>
-
-            {manualRiskAssets.length > 0 && !showInfrastructureAssets && (
-              <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50 p-3 text-xs leading-relaxed text-sky-900">
-                Infrastructure asset data is available. Turn on the
-                infrastructure assets toggle in the map legend to show asset
-                points and exposed-asset metrics.
               </div>
-            )}
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
+                  High-risk
+                </p>
+                <p className="text-sm font-black text-orange-700">
+                  {formatCount(summary.highRiskCellCount)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
+                  High-spread
+                </p>
+                <p className="text-sm font-black text-blue-700">
+                  {formatCount(summary.highSpreadCellCount)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-white p-2">
+                <p className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
+                  Expected exposed people
+                </p>
+                <p className="text-sm font-black text-purple-700">
+                  {formatCompactCount(summary.expectedExposedPopulation)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-white p-2">
+                <p className="text-[9px] font-bold uppercase tracking-wide text-neutral-400">
+                  Mean spread
+                </p>
+                <p className="text-sm font-black text-violet-700">
+                  {formatTemp(summary.meanSpread)}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-3 text-[10px] leading-snug text-neutral-500">
+              Risk is the share of forecast hours crossing the selected heat
+              threshold. Spread is cell-level forecast range, not region-level
+              uncertainty.
+            </p>
           </div>
 
-          <div className="rounded-xl border border-neutral-100 bg-white p-3">
+          <div className="mt-3 rounded-xl border border-neutral-100 bg-white p-3">
             <button
-              onClick={() => setShowAnalysisChain(!showAnalysisChain)}
-              className="flex w-full items-center justify-between text-left"
+              onClick={() => setShowDetails((value) => !value)}
+              className="flex w-full items-center justify-between text-left text-[10px] font-black uppercase tracking-wide text-neutral-500 hover:text-neutral-950"
             >
-              <div>
-                <div className="text-sm font-bold text-neutral-900">
-                  Analysis Chain
-                </div>
-                <div className="text-[10px] font-medium text-neutral-400">
-                  Spatial functions used to produce this result
-                </div>
-              </div>
-
-              <span className="text-xs font-bold text-neutral-400">
-                {showAnalysisChain ? "Hide" : "Show"}
-              </span>
+              <span>Details and downloads</span>
+              <span>{showDetails ? "Hide" : "Show"}</span>
             </button>
 
-            {showAnalysisChain && (
-              <div className="mt-3 space-y-2">
-                {getReadableAnalysisChain({
-                  showPopulationOverlay,
-                  showInfrastructureAssets,
-                }).map((step, index) => (
-                  <div key={step} className="flex gap-2 text-xs text-neutral-700">
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-bold text-white">
-                      {index + 1}
-                    </div>
-                    <div className="pt-0.5 leading-snug">{step}</div>
+            {showDetails && (
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-red-50 p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-red-500">
+                      Max risk
+                    </p>
+                    <p className="text-sm font-black text-red-700">
+                      {formatPercent(summary.maxExposure)}
+                    </p>
                   </div>
-                ))}
+                  <div className="rounded-lg bg-blue-50 p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-blue-500">
+                      Max spread
+                    </p>
+                    <p className="text-sm font-black text-blue-700">
+                      {formatTemp(summary.maxSpread)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-orange-50 p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-orange-500">
+                      Risk + spread
+                    </p>
+                    <p className="text-sm font-black text-orange-700">
+                      {formatCount(summary.highRiskHighSpreadCellCount)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-purple-50 p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-purple-500">
+                      Total population
+                    </p>
+                    <p className="text-sm font-black text-purple-700">
+                      {formatCompactCount(summary.totalPopulation)}
+                    </p>
+                  </div>
+                </div>
+
+                {Object.entries(groupedFeatures).map(([layerName, features]) => {
+                  const layerFeatures = features as GeoJSON.Feature[];
+                  const displayName =
+                    layerDisplayNames[layerName] ||
+                    DEFAULT_LAYER_DISPLAY_NAMES[layerName] ||
+                    layerName;
+
+                  return (
+                    <div
+                      key={layerName}
+                      className="flex items-center justify-between rounded-lg bg-neutral-50 px-2.5 py-2"
+                    >
+                      <div>
+                        <p className="text-[10px] font-bold text-neutral-800">
+                          {displayName}
+                        </p>
+                        <p className="text-[9px] text-neutral-400">
+                          {layerFeatures.length.toLocaleString()} features
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDownloadLayer(layerName)}
+                        className="rounded-md bg-neutral-950 px-2 py-1 text-[9px] font-bold text-white hover:bg-neutral-800"
+                      >
+                        Download
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {queryMetadata?.provenance?.data_sources?.length ? (
+                  <div className="rounded-lg bg-neutral-50 p-2">
+                    <p className="text-[9px] font-black uppercase tracking-wide text-neutral-400">
+                      Data sources
+                    </p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[9px] leading-snug text-neutral-600">
+                      {queryMetadata.provenance.data_sources.map((source) => (
+                        <li key={source}>{source}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
+        </>
+      )}
 
-          <ResultInterpreterPanel
-            queryMetadata={queryMetadata}
-            manualRiskSummary={manualRiskSummary}
-            populationOverlaySummary={
-              hasPopulationOverlay ? populationOverlaySummary : null
-            }
-            showPopulationOverlay={showPopulationOverlay}
-            showInfrastructureAssets={showInfrastructureAssets}
-          />
-
-          {hasPopulationOverlay && showPopulationOverlay && (
-            <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3">
-              <div className="mb-2">
-                <div className="text-sm font-bold text-purple-900">
-                  Expected Exposed Population
-                </div>
-                <div className="text-[10px] font-medium text-purple-500">
-                  WorldPop overlay on the heat-exposure grid
-                </div>
-              </div>
-
-              <div className="mb-3 rounded-xl bg-white/80 p-2 text-xs leading-relaxed text-purple-900">
-                <div className="font-semibold">
-                  Expected exposed people = population estimate × chance of
-                  crossing the selected heat threshold.
-                </div>
-                <div className="mt-1 text-[10px] leading-relaxed text-purple-700">
-                  This is an expected value, not a confirmed count of individual
-                  people exposed.
-                </div>
-              </div>
-
-              <div className="mb-3 rounded-xl bg-white/80 p-2 text-xs leading-relaxed text-purple-900">
-                {buildPopulationInterpretation({
-                  expectedExposedPopulation:
-                    populationOverlaySummary.expectedExposedPopulation,
-                  totalPopulation: populationOverlaySummary.totalPopulation,
-                  threshold: populationOverlaySummary.threshold,
-                  urgentDataGapCellCount:
-                    populationOverlaySummary.urgentDataGapCellCount,
-                })}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-400">
-                    Population
-                  </div>
-                  <div className="text-base font-bold text-purple-950">
-                    {formatCount(populationOverlaySummary.totalPopulation)}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-400">
-                    Expected exposed people
-                  </div>
-                  <div className="text-base font-bold text-purple-950">
-                    {formatCount(
-                      populationOverlaySummary.expectedExposedPopulation
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-400">
-                    Expected share
-                  </div>
-                  <div className="text-base font-bold text-purple-950">
-                    {formatPercent(populationOverlaySummary.exposurePercent)}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-400">
-                    High-priority cells
-                  </div>
-                  <div className="text-base font-bold text-purple-950">
-                    {populationOverlaySummary.highPriorityCellCount}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 space-y-1.5 text-xs text-purple-900">
-                <p>
-                  <span className="font-semibold">Urgent data-gap cells:</span>{" "}
-                  {populationOverlaySummary.urgentDataGapCellCount}
-                </p>
-                <p>
-                  <span className="font-semibold">
-                    High-priority expected exposed population:
-                  </span>{" "}
-                  {formatCount(populationOverlaySummary.highPriorityPopulation)}
-                </p>
-              </div>
-
-              {populationOverlaySummary.topPriorityCells.length > 0 && (
-                <div className="mt-3 rounded-xl bg-white/80 p-2">
-                  <div className="mb-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-purple-400">
-                      Priority zones
-                    </div>
-                    <div className="text-[10px] leading-snug text-purple-700">
-                      Ranked by expected exposed population, with forecast
-                      spread used as a planning signal.
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    {populationOverlaySummary.topPriorityCells.map(
-                      (feature, index) => {
-                        const cellId = getStringProp(feature, "cell_id");
-                        const expectedExposed = getNumberProp(
-                          feature,
-                          "expected_exposed_population"
-                        );
-                        const population = getNumberProp(
-                          feature,
-                          "population_estimate"
-                        );
-                        const exposureProbability = getNumberProp(
-                          feature,
-                          "exposure_probability"
-                        );
-                        const forecastSpread = getNumberProp(
-                          feature,
-                          "heat_uncertainty_delta"
-                        );
-                        const priorityScore = getNumberProp(
-                          feature,
-                          "priority_score"
-                        );
-                        const planningLabel = getPlanningClassLabel(feature);
-
-                        return (
-                          <div
-                            key={cellId || index}
-                            className="rounded-lg border border-purple-100 bg-purple-50/70 p-2"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="text-[11px] font-bold text-purple-950">
-                                  {index + 1}. {planningLabel}
-                                </div>
-                                <div className="text-[10px] font-medium text-purple-500">
-                                  {cellId || "population cell"}
-                                </div>
-                              </div>
-
-                              <div className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-purple-700">
-                                {formatCount(expectedExposed)}
-                              </div>
-                            </div>
-
-                            <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-purple-900">
-                              <div>
-                                <span className="font-semibold">
-                                  Population:
-                                </span>{" "}
-                                {formatCount(population)}
-                              </div>
-                              <div>
-                                <span className="font-semibold">
-                                  Expected exposed:
-                                </span>{" "}
-                                {formatCount(expectedExposed)}
-                              </div>
-                              <div>
-                                <span className="font-semibold">
-                                  Probability:
-                                </span>{" "}
-                                {formatPercent(exposureProbability)}
-                              </div>
-                              <div>
-                                <span className="font-semibold">
-                                  Forecast spread:
-                                </span>{" "}
-                                {formatTemp(forecastSpread)}
-                              </div>
-                            </div>
-
-                            <div className="mt-1 text-[10px] leading-snug text-purple-700">
-                              Priority score:{" "}
-                              {priorityScore === null
-                                ? "N/A"
-                                : priorityScore.toFixed(2)}
-                            </div>
-                          </div>
-                        );
-                      }
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={() => handleDownload("Population Exposure Overlay")}
-                className="mt-3 rounded-lg bg-purple-600 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-purple-700"
-              >
-                Download expected exposed population
-              </button>
-            </div>
-          )}
-
-          {hasPopulationOverlay && !showPopulationOverlay && (
-            <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs leading-relaxed text-purple-900">
-              Expected exposed population data is available. Turn on the
-              population overlay in the map legend to show values calculated as
-              population × exposure probability.
-            </div>
-          )}
-
-          {queryMetadata?.warnings && queryMetadata.warnings.length > 0 && (
-            <div className="rounded-xl bg-yellow-50 p-2 text-[10px] font-medium text-yellow-800">
-              {queryMetadata.warnings.map((warning) => (
-                <div key={warning}>⚠ {warning}</div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : Object.keys(groupedFeatures).length > 0 ? (
-        <ul className="space-y-2">
+      {!isHeatAnalysis && highlightedFeatures && highlightedFeatures.length > 0 && (
+        <div className="mt-3 space-y-2">
           {Object.entries(groupedFeatures).map(([layerName, features]) => {
-            const displayName = displayNames[layerName] || layerName;
+            const layerFeatures = features as GeoJSON.Feature[];
+            const displayName =
+              layerDisplayNames[layerName] ||
+              DEFAULT_LAYER_DISPLAY_NAMES[layerName] ||
+              layerName;
 
             return (
-              <li
+              <div
                 key={layerName}
-                className="rounded-xl border border-neutral-100 bg-white p-3 text-sm"
+                className="flex items-center justify-between rounded-xl bg-neutral-50 p-3"
               >
-                <strong>{displayName}</strong> ({features.length} features)
-
-                {features[0]?.properties?.description && (
-                  <div className="mt-1.5 space-y-0.5 text-xs leading-relaxed text-neutral-600">
-                    {String(features[0].properties.description)
-                      .split("\n")
-                      .map((line: string, idx: number) => (
-                        <p key={idx}>{line}</p>
-                      ))}
-                  </div>
-                )}
-
+                <div>
+                  <p className="text-xs font-bold text-neutral-900">
+                    {displayName}
+                  </p>
+                  <p className="text-[10px] text-neutral-500">
+                    {layerFeatures.length.toLocaleString()} features
+                  </p>
+                </div>
                 <button
-                  onClick={() => handleDownload(layerName)}
-                  className="mt-2 rounded-lg bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+                  onClick={() => handleDownloadLayer(layerName)}
+                  className="rounded-lg bg-neutral-950 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-neutral-800"
                 >
-                  Download layer
+                  Download
                 </button>
-              </li>
+              </div>
             );
           })}
-        </ul>
-      ) : (
-        <p className="text-sm text-gray-500">No features found.</p>
+        </div>
       )}
     </div>
   );

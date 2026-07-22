@@ -1,6 +1,4 @@
-import { useEffect } from "react";
 import MapCanvas from "../map/MapCanvas";
-import MainChat from "../MainChat";
 import Sidebar from "../Sidebar";
 import ConversationView from "../chat/ConversationView";
 import { useSpatialQuery } from "../../hooks/useSpatialQuery";
@@ -8,7 +6,12 @@ import { useSpatialQuery } from "../../hooks/useSpatialQuery";
 interface Conversation {
   id: string;
   title: string;
-  messages: { id: string; role: string; content: string; isLoading?: boolean }[];
+  messages: {
+    id: string;
+    role: string;
+    content: string;
+    isLoading?: boolean;
+  }[];
   createdAt: number;
   updatedAt: number;
 }
@@ -32,7 +35,6 @@ const AppLayout = ({
   activeConversation,
   activeConversationId,
   onNewChat,
-  onPromptClick,
   onSendMessage,
   onDeleteConversation,
   onClearAll,
@@ -46,27 +48,19 @@ const AppLayout = ({
     queryMetadata,
     isQuerying,
     runSpatialQuery,
+    runAssetHeatRiskQuery,
+    fetchAdminAssets,
     clearSpatialQuery,
     setDrawnGeometry,
   } = useSpatialQuery();
-
-  useEffect(() => {
-    if (drawnGeometry) {
-      runSpatialQuery(drawnGeometry, { "Backend Received Polygon": true });
-    } else {
-      clearSpatialQuery();
-    }
-  }, [drawnGeometry, runSpatialQuery, clearSpatialQuery]);
 
   const isDrawMode = drawnGeometry !== null;
   const hasActiveChat =
     activeConversation !== null && activeConversation.messages.length > 0;
 
-  const sidebarMode = isDrawMode
-    ? "hidden"
-    : hasActiveChat
-      ? "active-chat"
-      : "history";
+  const sidebarMode: "active-chat" | "history" | "hidden" = hasActiveChat
+    ? "active-chat"
+    : "history";
 
   return (
     <div className="flex h-[calc(100vh-2rem)] gap-4">
@@ -75,6 +69,8 @@ const AppLayout = ({
           onDrawGeometry={setDrawnGeometry}
           drawnGeometry={drawnGeometry}
           runSpatialQuery={runSpatialQuery}
+          runAssetHeatRiskQuery={runAssetHeatRiskQuery}
+          fetchAdminAssets={fetchAdminAssets}
           clearSpatialQuery={clearSpatialQuery}
           highlightedFeatures={highlightedFeatures}
           queryMetadata={queryMetadata}
@@ -82,17 +78,6 @@ const AppLayout = ({
           setIsDrawMode={() => {}}
           isQuerying={isQuerying}
         />
-
-        {!hasActiveChat && !isDrawMode && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
-            <div className="pointer-events-auto">
-              <MainChat
-                onPromptClick={onPromptClick}
-                onSendMessage={onSendMessage}
-              />
-            </div>
-          </div>
-        )}
       </main>
 
       <aside
@@ -111,11 +96,9 @@ const AppLayout = ({
               >
                 ← Back
               </button>
-
               <h2 className="max-w-[200px] truncate text-sm font-semibold text-neutral-900">
                 {activeConversation.title}
               </h2>
-
               <button
                 onClick={() => onDeleteConversation(activeConversation.id)}
                 className="text-xs text-neutral-400 hover:text-red-500"
@@ -123,7 +106,6 @@ const AppLayout = ({
                 Delete
               </button>
             </div>
-
             <div className="min-h-0 flex-1">
               <ConversationView
                 messages={activeConversation.messages}

@@ -1,14 +1,29 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
+import { getApiUrl } from "../../config/api";
 import { useMapbox } from "../../hooks/useMapbox";
-import SearchBar from "./SearchBar";
-import DrawControls from "./DrawControls";
 import FeatureHighlighter from "./FeatureHighlighter";
 import SpatialQueryPanel from "./SpatialQueryPanel";
 import MapControls from "./MapControls";
-import type { SpatialQueryMetadata } from "../../hooks/useSpatialQuery";
+import type {
+  AdminAssetLookupRequestOptions,
+  AssetHeatRiskRequestOptions,
+  AssetLookupOption,
+  SpatialQueryMetadata,
+} from "../../hooks/useSpatialQuery";
 
 interface SpatialQueryRequestOptions {
+  request_mode?: "geometry" | "admin";
+  mode?: "geometry" | "admin";
+
+  country_id?: string;
+  country_name?: string;
+
+  admin_level?: string;
+  admin_id?: string;
+  admin_name?: string;
+  h3_resolution?: number;
+
   threshold?: number;
   risk_metric?: string;
   asset_types?: string[];
@@ -29,8 +44,14 @@ interface MapCanvasProps {
     geometry: GeoJSON.Geometry,
     activeLayers: Record<string, boolean>,
     analysisType?: string,
-    requestOptions?: SpatialQueryRequestOptions
+    requestOptions?: SpatialQueryRequestOptions,
   ) => Promise<void>;
+  runAssetHeatRiskQuery: (
+    requestOptions: AssetHeatRiskRequestOptions,
+  ) => Promise<void>;
+  fetchAdminAssets: (
+    requestOptions: AdminAssetLookupRequestOptions,
+  ) => Promise<AssetLookupOption[]>;
   clearSpatialQuery: () => void;
   highlightedFeatures: GeoJSON.Feature[] | null;
   queryMetadata: SpatialQueryMetadata | null;
@@ -39,58 +60,792 @@ interface MapCanvasProps {
   isQuerying: boolean;
 }
 
+interface RegionSummary {
+  country_id: string;
+  country_iso3?: string;
+  country_name: string;
+  available_admin_levels: string[];
+  population?: {
+    status?: string;
+    path?: string | null;
+  };
+  assets?: {
+    status?: string;
+    asset_count?: number | null;
+  };
+}
+
+interface RegionsResponse {
+  countries?: RegionSummary[];
+  error?: string;
+}
+
+interface AdminBoundaryResponse extends GeoJSON.FeatureCollection {
+  metadata?: {
+    country_id?: string;
+    admin_level?: string;
+    normalized_admin_level?: string;
+    feature_count?: number;
+    source_path?: string;
+  };
+  error?: string;
+}
+
+interface SelectedAdminArea {
+  countryId: string;
+  countryName: string;
+  adminId: string;
+  adminName: string;
+  adminLevel: string;
+  displayAdminLevel: string;
+  geometry: GeoJSON.Geometry;
+}
+
+interface AdminBoundaryConfig {
+  countryId: string;
+  countryName: string;
+  adminLevel: string;
+  cacheKey: string;
+  title: string;
+  unitLabel: string;
+  unitLabelLower: string;
+  unitPluralLower: string;
+  apiPath: string;
+}
+
 type MapLayer = "tas" | "wet_bulb" | "manual_heat_risk" | null;
+type HeatDisplayMode = "combined" | "risk" | "uncertainty";
 
-function getGeometryCenter(geometry: GeoJSON.Geometry): [number, number] {
-  if (geometry.type === "Point") {
-    return geometry.coordinates as [number, number];
+type BoundaryLoadStatus =
+  | "idle"
+  | "waiting_for_map"
+  | "fetching_regions"
+  | "fetching"
+  | "downloading"
+  | "parsing"
+  | "adding_layers"
+  | "ready"
+  | "error";
+
+interface BoundaryLoadState {
+  status: BoundaryLoadStatus;
+  message: string;
+  percent: number;
+  featureCount?: number;
+  error?: string;
+}
+
+interface AnalysisSettings {
+  defaultCountryId: string;
+  defaultAdminLevel: string;
+  heatThreshold: number;
+  h3Resolution: number;
+  assetBufferKm: number;
+  heatDisplayMode: HeatDisplayMode;
+  showPopulationOverlay: boolean;
+  showInfrastructureAssets: boolean;
+}
+
+const analysisSettingsStorageKey = "pict-analysis-settings-v2";
+
+const defaultAnalysisSettings: AnalysisSettings = {
+  defaultCountryId: "fji",
+  defaultAdminLevel: "province",
+  heatThreshold: 22,
+  h3Resolution: 7,
+  assetBufferKm: 5,
+  heatDisplayMode: "combined",
+  showPopulationOverlay: false,
+  showInfrastructureAssets: false,
+};
+
+const adminSourceId = "pict-admin-source";
+const adminFillLayerId = "pict-admin-fill";
+const adminOutlineLayerId = "pict-admin-outline";
+const adminHoverFillLayerId = "pict-admin-hover-fill";
+const adminHoverOutlineLayerId = "pict-admin-hover-outline";
+const adminSelectedFillLayerId = "pict-admin-selected-fill";
+const adminSelectedOutlineLayerId = "pict-admin-selected-outline";
+
+type MapboxFilter = Parameters<mapboxgl.Map["setFilter"]>[1];
+
+const noAdminFilter: MapboxFilter = ["==", ["get", "admin_id"], "__none__"];
+
+const cachedAdminGeoJsonByKey: Record<string, GeoJSON.FeatureCollection> = {};
+
+const assetPlaceholderFallbacks: Record<string, string> = {
+  fji: "Lautoka Hospital",
+  wsm: "Tupua Tamasese Meaole Hospital",
+  ton: "Vaiola Hospital",
+  vut: "Vila Central Hospital",
+  slb: "National Referral Hospital",
+  png: "Port Moresby General Hospital",
+  ncl: "Médipôle",
+  pyf: "Centre Hospitalier de Polynésie Française",
+  asm: "LBJ Tropical Medical Center",
+  gum: "Guam Memorial Hospital",
+};
+
+function clampSettingNumber(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return fallback;
+
+  return Math.max(min, Math.min(max, numberValue));
+}
+
+function isHeatDisplayMode(value: unknown): value is HeatDisplayMode {
+  return value === "combined" || value === "risk" || value === "uncertainty";
+}
+
+function normalizeAdminLevel(value: unknown, fallback = "province"): string {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "_")
+    .trim();
+
+  return normalized || fallback;
+}
+
+function loadAnalysisSettings(): AnalysisSettings {
+  if (typeof window === "undefined") {
+    return defaultAnalysisSettings;
   }
 
-  if (geometry.type === "LineString") {
-    const coords = geometry.coordinates;
-    const mid = Math.floor(coords.length / 2);
-    return coords[mid] as [number, number];
-  }
+  try {
+    const rawSettings =
+      window.localStorage.getItem(analysisSettingsStorageKey) ??
+      window.localStorage.getItem("pict-analysis-settings-v1");
 
-  if (geometry.type === "Polygon") {
-    const ring = geometry.coordinates[0];
-    let sumLng = 0;
-    let sumLat = 0;
-    const count = ring.length - 1;
-
-    if (count <= 0) return [0, 0];
-
-    for (let i = 0; i < count; i += 1) {
-      sumLng += ring[i][0];
-      sumLat += ring[i][1];
+    if (!rawSettings) {
+      return defaultAnalysisSettings;
     }
 
-    return [sumLng / count, sumLat / count];
+    const parsed = JSON.parse(rawSettings) as Partial<
+      AnalysisSettings & { defaultAdminBoundaryMode?: string }
+    >;
+
+    return {
+      defaultCountryId: String(parsed.defaultCountryId || "fji").toLowerCase(),
+      defaultAdminLevel: normalizeAdminLevel(
+        parsed.defaultAdminLevel ?? parsed.defaultAdminBoundaryMode,
+        defaultAnalysisSettings.defaultAdminLevel,
+      ),
+      heatThreshold: clampSettingNumber(
+        parsed.heatThreshold,
+        defaultAnalysisSettings.heatThreshold,
+        10,
+        45,
+      ),
+      h3Resolution: Math.round(
+        clampSettingNumber(
+          parsed.h3Resolution,
+          defaultAnalysisSettings.h3Resolution,
+          5,
+          7,
+        ),
+      ),
+      assetBufferKm: clampSettingNumber(
+        parsed.assetBufferKm,
+        defaultAnalysisSettings.assetBufferKm,
+        1,
+        20,
+      ),
+      heatDisplayMode: isHeatDisplayMode(parsed.heatDisplayMode)
+        ? parsed.heatDisplayMode
+        : defaultAnalysisSettings.heatDisplayMode,
+      showPopulationOverlay:
+        typeof parsed.showPopulationOverlay === "boolean"
+          ? parsed.showPopulationOverlay
+          : defaultAnalysisSettings.showPopulationOverlay,
+      showInfrastructureAssets:
+        typeof parsed.showInfrastructureAssets === "boolean"
+          ? parsed.showInfrastructureAssets
+          : defaultAnalysisSettings.showInfrastructureAssets,
+    };
+  } catch (error) {
+    console.warn("Could not load analysis settings:", error);
+    return defaultAnalysisSettings;
+  }
+}
+
+function saveAnalysisSettings(settings: AnalysisSettings): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      analysisSettingsStorageKey,
+      JSON.stringify(settings),
+    );
+  } catch (error) {
+    console.warn("Could not save analysis settings:", error);
+  }
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+
+  const mb = bytes / (1024 * 1024);
+
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+function getStringProperty(
+  properties: Record<string, unknown> | null | undefined,
+  key: string,
+  fallback = "",
+): string {
+  const value = properties?.[key];
+
+  if (value === null || value === undefined) return fallback;
+
+  return String(value);
+}
+
+function buildAdminFilter(adminId: string | null): MapboxFilter {
+  if (!adminId) return noAdminFilter;
+
+  return ["==", ["get", "admin_id"], adminId];
+}
+
+function formatMetadataValue(value: unknown, fallback = "—"): string {
+  if (value === null || value === undefined || value === "") return fallback;
+
+  return String(value);
+}
+
+function formatCompactNumber(value: unknown, fallback = "—"): string {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return fallback;
+
+  return new Intl.NumberFormat("en", {
+    notation: Math.abs(numberValue) >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: Math.abs(numberValue) >= 10_000 ? 1 : 0,
+  }).format(numberValue);
+}
+
+function formatPercentValue(value: unknown, fallback = "—"): string {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return fallback;
+
+  return `${Math.round(numberValue * 100)}%`;
+}
+
+function getAssetTypeLabel(assetType: unknown): string {
+  const value = String(assetType || "asset")
+    .replace(/_/g, " ")
+    .trim();
+
+  if (!value) return "Asset";
+
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getAssetOptionLabel(asset: AssetLookupOption): string {
+  const assetName = asset.asset_name || "Unnamed asset";
+  const assetType = getAssetTypeLabel(asset.asset_type);
+
+  return `${assetName} — ${assetType}`;
+}
+
+function normalizeAssetLookupText(value: unknown): string {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getAssetFromLookupText(
+  lookupText: string,
+  assetOptions: AssetLookupOption[],
+): AssetLookupOption | null {
+  const normalizedLookup = normalizeAssetLookupText(lookupText);
+
+  if (!normalizedLookup) return null;
+
+  return (
+    assetOptions.find((asset) => {
+      const normalizedName = normalizeAssetLookupText(asset.asset_name);
+      const normalizedLabel = normalizeAssetLookupText(getAssetOptionLabel(asset));
+      const normalizedId = normalizeAssetLookupText(asset.asset_id);
+
+      return (
+        normalizedLookup === normalizedName ||
+        normalizedLookup === normalizedLabel ||
+        normalizedLookup === normalizedId
+      );
+    }) ?? null
+  );
+}
+
+function getAssetTypeFilterHint(assetOptions: AssetLookupOption[]): string {
+  const typeCounts = assetOptions.reduce<Record<string, number>>((counts, asset) => {
+    const key = getAssetTypeLabel(asset.asset_type);
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  const topTypes = Object.entries(typeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([type, count]) => `${count} ${type.toLowerCase()}`);
+
+  if (topTypes.length === 0) return "";
+
+  return topTypes.join(" · ");
+}
+
+function getAssetPlaceholder(
+  selectedArea: SelectedAdminArea | null,
+  selectedCountry: RegionSummary | null,
+  assetOptions: AssetLookupOption[],
+  isLoadingAssets: boolean,
+): string {
+  if (!selectedArea) {
+    return "Select an admin area first";
   }
 
-  if (geometry.type === "MultiPolygon") {
-    const ring = geometry.coordinates[0][0];
-    let sumLng = 0;
-    let sumLat = 0;
-    const count = ring.length - 1;
+  if (isLoadingAssets) {
+    return `Loading assets in ${selectedArea.adminName}...`;
+  }
 
-    if (count <= 0) return [0, 0];
+  const preferredAsset =
+    assetOptions.find((asset) => asset.asset_type === "hospital") ??
+    assetOptions.find((asset) => asset.asset_type === "school") ??
+    assetOptions.find((asset) => asset.asset_type === "port") ??
+    assetOptions[0];
 
-    for (let i = 0; i < count; i += 1) {
-      sumLng += ring[i][0];
-      sumLat += ring[i][1];
+  const fallback =
+    assetPlaceholderFallbacks[selectedArea.countryId] ??
+    assetPlaceholderFallbacks[selectedCountry?.country_id ?? ""] ??
+    null;
+
+  const exampleName = preferredAsset?.asset_name || fallback;
+
+  if (exampleName) {
+    return `Choose an asset, e.g. ${exampleName}`;
+  }
+
+  return `No assets loaded for ${selectedArea.adminName}`;
+}
+
+function buildInfrastructureAssetFeatures(
+  assets: AssetLookupOption[],
+): GeoJSON.Feature[] {
+  return assets.flatMap((asset) => {
+    const coordinates = asset.coordinates;
+
+    if (
+      !Array.isArray(coordinates) ||
+      coordinates.length < 2 ||
+      !Number.isFinite(Number(coordinates[0])) ||
+      !Number.isFinite(Number(coordinates[1]))
+    ) {
+      return [];
     }
 
-    return [sumLng / count, sumLat / count];
+    return [
+      {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [Number(coordinates[0]), Number(coordinates[1])],
+        },
+        properties: {
+          ...asset,
+          layer_name: "Manual Heat Risk Assets",
+          asset_name: asset.asset_name,
+          asset_type: asset.asset_type,
+          exposed_to_hazard: false,
+        },
+      },
+    ];
+  });
+}
+
+function getAdminLevelLabel(countryId: string, adminLevel: string): string {
+  const normalized = normalizeAdminLevel(adminLevel);
+
+  if (countryId === "fji" && (normalized === "province" || normalized === "adm2")) {
+    return "Province";
   }
 
-  return [0, 0];
+  if (countryId === "fji" && normalized === "tikina") {
+    return "Tikina";
+  }
+
+  if (normalized === "adm0") return "Country";
+  if (normalized === "adm1") return "ADM1";
+  if (normalized === "adm2") return "ADM2";
+  if (normalized === "adm3") return "ADM3";
+
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getPreferredAdminLevels(country: RegionSummary | null): string[] {
+  if (!country) return ["province"];
+
+  const levels = Array.from(
+    new Set((country.available_admin_levels || []).map((level) => normalizeAdminLevel(level))),
+  );
+
+  if (country.country_id === "fji") {
+    return ["province", "tikina"].filter(
+      (level) => levels.includes(level) || (level === "province" && levels.includes("adm2")),
+    );
+  }
+
+  const preferred = ["adm1", "adm2", "adm0"].filter((level) =>
+    levels.includes(level),
+  );
+
+  return preferred.length > 0 ? preferred : levels;
+}
+
+function buildAdminBoundaryConfig(
+  country: RegionSummary | null,
+  adminLevel: string,
+): AdminBoundaryConfig | null {
+  if (!country) return null;
+
+  const normalizedLevel = normalizeAdminLevel(adminLevel);
+  const label = getAdminLevelLabel(country.country_id, normalizedLevel);
+  const labelLower = label.toLowerCase();
+
+  return {
+    countryId: country.country_id,
+    countryName: country.country_name,
+    adminLevel: normalizedLevel,
+    cacheKey: `${country.country_id}:${normalizedLevel}`,
+    title: label,
+    unitLabel: label,
+    unitLabelLower: labelLower,
+    unitPluralLower:
+      labelLower === "country"
+        ? "countries"
+        : labelLower === "tikina"
+          ? "tikina"
+          : `${labelLower}s`,
+    apiPath: getApiUrl(
+      `/api/admin-boundaries?country_id=${encodeURIComponent(
+        country.country_id,
+      )}&admin_level=${encodeURIComponent(normalizedLevel)}`,
+    ),
+  };
+}
+
+
+function getLongitudeRangeFromCoordinates(
+  coordinates: unknown,
+): { min: number; max: number } | null {
+  const stack: unknown[] = [coordinates];
+  let min = Infinity;
+  let max = -Infinity;
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+
+    if (!Array.isArray(current)) continue;
+
+    if (
+      current.length >= 2 &&
+      typeof current[0] === "number" &&
+      typeof current[1] === "number"
+    ) {
+      const lng = current[0];
+
+      if (Number.isFinite(lng)) {
+        min = Math.min(min, lng);
+        max = Math.max(max, lng);
+      }
+
+      continue;
+    }
+
+    current.forEach((child) => stack.push(child));
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+
+  return { min, max };
+}
+
+function unwrapCoordinateForMapDisplay(point: unknown): unknown {
+  if (
+    !Array.isArray(point) ||
+    point.length < 2 ||
+    typeof point[0] !== "number" ||
+    typeof point[1] !== "number"
+  ) {
+    return point;
+  }
+
+  const lng = point[0] < 0 ? point[0] + 360 : point[0];
+
+  return [lng, point[1], ...point.slice(2)];
+}
+
+function unwrapCoordinatesForMapDisplay(coordinates: unknown): unknown {
+  if (!Array.isArray(coordinates)) return coordinates;
+
+  if (
+    coordinates.length >= 2 &&
+    typeof coordinates[0] === "number" &&
+    typeof coordinates[1] === "number"
+  ) {
+    return unwrapCoordinateForMapDisplay(coordinates);
+  }
+
+  return coordinates.map(unwrapCoordinatesForMapDisplay);
+}
+
+function unwrapGeometryForMapDisplay(
+  geometry: GeoJSON.Geometry | null | undefined,
+): GeoJSON.Geometry | null | undefined {
+  if (!geometry || !("coordinates" in geometry)) {
+    return geometry;
+  }
+
+  const range = getLongitudeRangeFromCoordinates(geometry.coordinates);
+
+  if (!range || range.max - range.min <= 180) {
+    return geometry;
+  }
+
+  return {
+    ...geometry,
+    coordinates: unwrapCoordinatesForMapDisplay(
+      geometry.coordinates,
+    ) as GeoJSON.Position[] | GeoJSON.Position[][] | GeoJSON.Position[][][],
+  } as GeoJSON.Geometry;
+}
+
+function normalizeAdminFeatureCollection(
+  collection: GeoJSON.FeatureCollection,
+  config: AdminBoundaryConfig,
+): GeoJSON.FeatureCollection {
+  return {
+    ...collection,
+    features: (collection.features || []).map((feature, index) => {
+      const properties = (feature.properties || {}) as Record<string, unknown>;
+      const adminName =
+        getStringProperty(properties, "admin_name") ||
+        getStringProperty(properties, "shapeName") ||
+        getStringProperty(properties, "name") ||
+        `${config.unitLabel} ${index + 1}`;
+      const adminId =
+        getStringProperty(properties, "admin_id") ||
+        `${config.countryId}_${config.adminLevel}_${index}`;
+
+      return {
+        ...feature,
+        geometry: unwrapGeometryForMapDisplay(feature.geometry) ?? feature.geometry,
+        properties: {
+          ...properties,
+          country_id:
+            getStringProperty(properties, "country_id") || config.countryId,
+          country_name:
+            getStringProperty(properties, "country_name") || config.countryName,
+          admin_level:
+            getStringProperty(properties, "admin_level") || config.adminLevel,
+          admin_id: adminId,
+          admin_name: adminName,
+          display_admin_level: config.adminLevel,
+        },
+      };
+    }),
+  };
+}
+
+async function fetchAdminBoundaryGeoJsonWithProgress(
+  config: AdminBoundaryConfig,
+  signal: AbortSignal,
+  onProgress: (state: BoundaryLoadState) => void,
+): Promise<GeoJSON.FeatureCollection> {
+  const cachedGeoJson = cachedAdminGeoJsonByKey[config.cacheKey];
+
+  if (cachedGeoJson) {
+    onProgress({
+      status: "parsing",
+      message: `Using cached ${config.countryName} ${config.unitPluralLower} boundaries.`,
+      percent: 72,
+      featureCount: cachedGeoJson.features.length,
+    });
+
+    return cachedGeoJson;
+  }
+
+  onProgress({
+    status: "fetching",
+    message: `Requesting ${config.countryName} ${config.unitPluralLower} boundaries...`,
+    percent: 15,
+  });
+
+  const response = await fetch(config.apiPath, {
+    cache: "force-cache",
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    throw new Error(
+      `Could not fetch ${config.unitLabelLower} GeoJSON: HTTP ${response.status}. ${errorText.slice(
+        0,
+        160,
+      )}`,
+    );
+  }
+
+  const contentLengthHeader = response.headers.get("content-length");
+  const contentLength = contentLengthHeader
+    ? Number(contentLengthHeader)
+    : Number.NaN;
+
+  let geoJsonText = "";
+
+  if (response.body) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    let receivedBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      if (value) {
+        receivedBytes += value.length;
+        chunks.push(decoder.decode(value, { stream: true }));
+
+        const downloadPercent = Number.isFinite(contentLength)
+          ? Math.min(65, 20 + (receivedBytes / contentLength) * 45)
+          : Math.min(65, 20 + receivedBytes / 40_000);
+
+        const downloadedText = Number.isFinite(contentLength)
+          ? `${formatBytes(receivedBytes)} / ${formatBytes(contentLength)}`
+          : `${formatBytes(receivedBytes)} downloaded`;
+
+        onProgress({
+          status: "downloading",
+          message: `Downloading boundaries: ${downloadedText}`,
+          percent: Math.round(downloadPercent),
+        });
+      }
+    }
+
+    chunks.push(decoder.decode());
+    geoJsonText = chunks.join("");
+  } else {
+    onProgress({
+      status: "downloading",
+      message: "Downloading admin boundaries...",
+      percent: 45,
+    });
+
+    geoJsonText = await response.text();
+  }
+
+  onProgress({
+    status: "parsing",
+    message: "Parsing boundary GeoJSON...",
+    percent: 72,
+  });
+
+  const parsed = JSON.parse(geoJsonText) as AdminBoundaryResponse;
+
+  const featureCount = parsed.features?.length ?? 0;
+
+  if (!parsed || parsed.type !== "FeatureCollection" || featureCount === 0) {
+    throw new Error(`${config.unitLabel} GeoJSON loaded, but it has no features.`);
+  }
+
+  const normalized = normalizeAdminFeatureCollection(parsed, config);
+  cachedAdminGeoJsonByKey[config.cacheKey] = normalized;
+
+  onProgress({
+    status: "parsing",
+    message: `Parsed ${featureCount} ${config.unitPluralLower} boundaries.`,
+    percent: 78,
+    featureCount,
+  });
+
+  return normalized;
+}
+
+function featureCollectionBounds(
+  collection: GeoJSON.FeatureCollection,
+): mapboxgl.LngLatBoundsLike | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+
+  const visit = (coordinates: unknown) => {
+    if (!Array.isArray(coordinates)) return;
+
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      const lng = coordinates[0];
+      const lat = coordinates[1];
+
+      if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        west = Math.min(west, lng);
+        south = Math.min(south, lat);
+        east = Math.max(east, lng);
+        north = Math.max(north, lat);
+      }
+
+      return;
+    }
+
+    coordinates.forEach(visit);
+  };
+
+  collection.features.forEach((feature) => {
+    visit(feature.geometry?.coordinates);
+  });
+
+  if (![west, south, east, north].every(Number.isFinite)) return null;
+
+  if (east - west > 180) {
+    return null;
+  }
+
+  return [
+    [west, south],
+    [east, north],
+  ];
 }
 
 const MapCanvas = ({
   onDrawGeometry,
   drawnGeometry,
   runSpatialQuery,
+  runAssetHeatRiskQuery,
+  fetchAdminAssets,
   clearSpatialQuery,
   highlightedFeatures,
   queryMetadata,
@@ -101,50 +856,796 @@ const MapCanvas = ({
     mapboxMap,
     activeLayer,
     setActiveLayer,
-    showGlobalDataset,
     setShowGlobalDataset,
   } = useMapbox();
 
+  const initialAnalysisSettings = useMemo(loadAnalysisSettings, []);
+
   const [isLegendExpanded, setIsLegendExpanded] = useState(true);
-  const [manualHeatThreshold, setManualHeatThreshold] = useState(22);
-  const [showPopulationOverlay, setShowPopulationOverlay] = useState(false);
-  const [showInfrastructureAssets, setShowInfrastructureAssets] =
-    useState(false);
+  const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const [isLoadingRegions, setIsLoadingRegions] = useState(false);
+  const [regionsError, setRegionsError] = useState<string | null>(null);
+  const [selectedCountryId, setSelectedCountryId] = useState(
+    initialAnalysisSettings.defaultCountryId,
+  );
+  const [selectedAdminLevel, setSelectedAdminLevel] = useState(
+    initialAnalysisSettings.defaultAdminLevel,
+  );
+  const [manualHeatThreshold, setManualHeatThreshold] = useState(
+    initialAnalysisSettings.heatThreshold,
+  );
+  const [heatDisplayMode, setHeatDisplayMode] = useState<HeatDisplayMode>(
+    initialAnalysisSettings.heatDisplayMode,
+  );
+  const [showPopulationOverlay, setShowPopulationOverlay] = useState(
+    initialAnalysisSettings.showPopulationOverlay,
+  );
+  const [showInfrastructureAssets, setShowInfrastructureAssets] = useState(
+    initialAnalysisSettings.showInfrastructureAssets,
+  );
+  const [selectedArea, setSelectedArea] = useState<SelectedAdminArea | null>(
+    null,
+  );
+  const [boundaryLoadAttempt, setBoundaryLoadAttempt] = useState(0);
+  const [boundaryLoad, setBoundaryLoad] = useState<BoundaryLoadState>({
+    status: "idle",
+    message: "Preparing admin boundaries...",
+    percent: 0,
+  });
+  const [assetOptions, setAssetOptions] = useState<AssetLookupOption[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [assetLookupText, setAssetLookupText] = useState("");
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+  const [assetLookupError, setAssetLookupError] = useState<string | null>(null);
+  const [assetBufferKm, setAssetBufferKm] = useState(
+    initialAnalysisSettings.assetBufferKm,
+  );
+  const [h3Resolution, setH3Resolution] = useState(
+    initialAnalysisSettings.h3Resolution,
+  );
 
-  const manualHeatThresholdRef = useRef(22);
+  const manualHeatThresholdRef = useRef(initialAnalysisSettings.heatThreshold);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const didInitializeHeatLayerRef = useRef(false);
 
+  const selectedCountry =
+    regions.find((country) => country.country_id === selectedCountryId) ?? null;
+  const availableAdminLevels = useMemo(
+    () => getPreferredAdminLevels(selectedCountry),
+    [selectedCountry],
+  );
+  const adminBoundaryConfig = useMemo(
+    () => buildAdminBoundaryConfig(selectedCountry, selectedAdminLevel),
+    [selectedAdminLevel, selectedCountry],
+  );
   const currentActiveLayer = activeLayer as MapLayer;
+  const activeAnalysisGeometry = selectedArea?.geometry ?? drawnGeometry;
+  const boundaryLayerReady = boundaryLoad.status === "ready";
+  const hasHeatResult =
+    queryMetadata?.analysis_type === "manual_heat_risk" ||
+    queryMetadata?.analysis_type === "asset_heat_risk";
+  const isAssetResult = queryMetadata?.analysis_type === "asset_heat_risk";
+  const exactAssetFromInput = getAssetFromLookupText(
+    assetLookupText,
+    assetOptions,
+  );
+  const selectedAsset =
+    assetOptions.find((asset) => asset.asset_id === selectedAssetId) ??
+    exactAssetFromInput;
+  const assetDropdownPlaceholder = getAssetPlaceholder(
+    selectedArea,
+    selectedCountry,
+    assetOptions,
+    isLoadingAssets,
+  );
+  const hasTypedAssetQuery = assetLookupText.trim().length > 0;
+  const hasNoLoadedAssets =
+    selectedArea !== null &&
+    !isLoadingAssets &&
+    !assetLookupError &&
+    assetOptions.length === 0;
+  const canRunAssetLookup =
+    selectedArea !== null &&
+    assetOptions.length > 0 &&
+    !isLoadingAssets &&
+    !isQuerying &&
+    (selectedAsset !== null || hasTypedAssetQuery);
+
+  const highlightedFeaturesForMap = useMemo(() => {
+    const baseFeatures = highlightedFeatures ?? [];
+
+    if (!showInfrastructureAssets || assetOptions.length === 0) {
+      return baseFeatures;
+    }
+
+    const existingAssetIds = new Set(
+      baseFeatures
+        .filter(
+          (feature) =>
+            feature.properties?.layer_name === "Manual Heat Risk Assets",
+        )
+        .map((feature) => String(feature.properties?.asset_id || "")),
+    );
+
+    const cachedAssetFeatures = buildInfrastructureAssetFeatures(
+      assetOptions,
+    ).filter(
+      (feature) =>
+        !existingAssetIds.has(String(feature.properties?.asset_id || "")),
+    );
+
+    return [...baseFeatures, ...cachedAssetFeatures];
+  }, [assetOptions, highlightedFeatures, showInfrastructureAssets]);
 
   useEffect(() => {
     manualHeatThresholdRef.current = manualHeatThreshold;
   }, [manualHeatThreshold]);
 
-  const handleRerunHeatExposure = () => {
-  if (!drawnGeometry) return;
+  useEffect(() => {
+    saveAnalysisSettings({
+      defaultCountryId: selectedCountryId,
+      defaultAdminLevel: selectedAdminLevel,
+      heatThreshold: manualHeatThreshold,
+      h3Resolution,
+      assetBufferKm,
+      heatDisplayMode,
+      showPopulationOverlay,
+      showInfrastructureAssets,
+    });
+  }, [
+    assetBufferKm,
+    h3Resolution,
+    heatDisplayMode,
+    manualHeatThreshold,
+    selectedAdminLevel,
+    selectedCountryId,
+    showInfrastructureAssets,
+    showPopulationOverlay,
+  ]);
 
-  setActiveLayer("manual_heat_risk" as never);
-  setShowGlobalDataset(false);
+  useEffect(() => {
+    if (didInitializeHeatLayerRef.current) return;
 
-  runSpatialQuery(
-    drawnGeometry,
-    { "Manual Heat Risk": true },
-    "manual_heat_risk",
-    {
-      threshold: manualHeatThreshold,
-      risk_metric: "heat",
-      asset_types: ["hospital", "school", "port"],
-      comparison_operator: ">=",
-      include_population: true,
-      include_assets: true,
-      return_layers: {
-        risk_grid: true,
-        sampled_assets: true,
-        ranked_assets: true,
-      },
+    didInitializeHeatLayerRef.current = true;
+    setActiveLayer("manual_heat_risk" as never);
+    setShowGlobalDataset(false);
+  }, [setActiveLayer, setShowGlobalDataset]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setIsLoadingRegions(true);
+    setRegionsError(null);
+    setBoundaryLoad({
+      status: "fetching_regions",
+      message: "Loading region registry...",
+      percent: 5,
+    });
+
+    fetch(getApiUrl("/api/regions"), { cache: "force-cache" })
+      .then(async (response) => {
+        const data = (await response.json()) as RegionsResponse;
+
+        if (!response.ok) {
+          throw new Error(data.error || `HTTP ${response.status}`);
+        }
+
+        return data.countries || [];
+      })
+      .then((countries) => {
+        if (cancelled) return;
+
+        const sortedCountries = [...countries].sort((a, b) =>
+          a.country_name.localeCompare(b.country_name),
+        );
+
+        setRegions(sortedCountries);
+
+        const currentCountry =
+          sortedCountries.find(
+            (country) => country.country_id === selectedCountryId,
+          ) ?? sortedCountries.find((country) => country.country_id === "fji") ??
+          sortedCountries[0];
+
+        if (currentCountry && currentCountry.country_id !== selectedCountryId) {
+          setSelectedCountryId(currentCountry.country_id);
+        }
+
+        if (currentCountry) {
+          const preferredLevels = getPreferredAdminLevels(currentCountry);
+
+          if (!preferredLevels.includes(selectedAdminLevel)) {
+            setSelectedAdminLevel(preferredLevels[0] ?? "adm0");
+          }
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        const message = error instanceof Error ? error.message : String(error);
+
+        setRegionsError(message);
+        setBoundaryLoad({
+          status: "error",
+          message: "Region registry could not be loaded.",
+          percent: 0,
+          error: message,
+        });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingRegions(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCountry) return;
+
+    const preferredLevels = getPreferredAdminLevels(selectedCountry);
+
+    if (!preferredLevels.includes(selectedAdminLevel)) {
+      setSelectedAdminLevel(preferredLevels[0] ?? "adm0");
+      setSelectedArea(null);
+      clearSpatialQuery();
+      onDrawGeometry(null);
+      return;
     }
+
+    setBoundaryLoadAttempt((attempt) => attempt + 1);
+    setSelectedArea(null);
+    setAssetOptions([]);
+    setSelectedAssetId("");
+    setAssetLookupText("");
+    setAssetLookupError(null);
+    clearSpatialQuery();
+    onDrawGeometry(null);
+  }, [selectedCountryId]);
+
+  useEffect(() => {
+    if (!selectedArea) {
+      setAssetOptions([]);
+      setSelectedAssetId("");
+      setAssetLookupText("");
+      setAssetLookupError(null);
+      setIsLoadingAssets(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    setAssetOptions([]);
+    setSelectedAssetId("");
+    setAssetLookupText("");
+    setAssetLookupError(null);
+    setIsLoadingAssets(true);
+
+    fetchAdminAssets({
+      request_mode: "admin",
+      mode: "admin",
+      country_id: selectedArea.countryId,
+      country_name: selectedArea.countryName,
+      admin_level: selectedArea.adminLevel,
+      admin_id: selectedArea.adminId,
+      admin_name: selectedArea.adminName,
+      asset_types: [
+        "hospital",
+        "school",
+        "port",
+        "power_substation",
+        "critical_facility",
+      ],
+    })
+      .then((assets) => {
+        if (cancelled) return;
+        setAssetOptions(assets);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setAssetOptions([]);
+        setAssetLookupError(
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingAssets(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchAdminAssets, selectedArea]);
+
+  useEffect(() => {
+    const coordinates = queryMetadata?.matched_asset?.coordinates;
+
+    if (
+      !mapboxMap ||
+      !Array.isArray(coordinates) ||
+      coordinates.length < 2 ||
+      !Number.isFinite(Number(coordinates[0])) ||
+      !Number.isFinite(Number(coordinates[1]))
+    ) {
+      return;
+    }
+
+    mapboxMap.flyTo({
+      center: [Number(coordinates[0]), Number(coordinates[1])],
+      zoom: Math.max(mapboxMap.getZoom(), 11),
+      duration: 900,
+    });
+  }, [mapboxMap, queryMetadata?.matched_asset?.coordinates]);
+
+  const runHeatExposureAnalysis = useCallback(
+    (
+      geometry: GeoJSON.Geometry,
+      adminContext?: SelectedAdminArea,
+      thresholdOverride?: number,
+    ) => {
+      popupRef.current?.remove();
+      popupRef.current = null;
+
+      const threshold = Number.isFinite(thresholdOverride)
+        ? Number(thresholdOverride)
+        : manualHeatThresholdRef.current;
+
+      setActiveLayer("manual_heat_risk" as never);
+      setShowGlobalDataset(false);
+
+      runSpatialQuery(
+        geometry,
+        { "Manual Heat Risk": true },
+        "manual_heat_risk",
+        {
+          request_mode: adminContext ? "admin" : "geometry",
+          mode: adminContext ? "admin" : "geometry",
+
+          country_id: adminContext?.countryId ?? selectedCountry?.country_id,
+          country_name:
+            adminContext?.countryName ?? selectedCountry?.country_name,
+
+          admin_level: adminContext?.adminLevel,
+          admin_id: adminContext?.adminId,
+          admin_name: adminContext?.adminName,
+          h3_resolution: h3Resolution,
+
+          threshold,
+          risk_metric: "heat",
+          asset_types: ["hospital", "school", "port"],
+          comparison_operator: ">=",
+          include_population: true,
+          include_assets: false,
+          return_layers: {
+            risk_grid: true,
+            sampled_assets: false,
+            ranked_assets: false,
+          },
+        },
+      );
+    },
+    [
+      h3Resolution,
+      runSpatialQuery,
+      selectedCountry?.country_id,
+      selectedCountry?.country_name,
+      setActiveLayer,
+      setShowGlobalDataset,
+    ],
   );
-};
+
+  const handleRunAssetHeatRisk = useCallback(() => {
+    const typedQuery = assetLookupText.trim();
+
+    if (!selectedArea || (!selectedAsset && !typedQuery)) return;
+
+    popupRef.current?.remove();
+    popupRef.current = null;
+
+    setActiveLayer("manual_heat_risk" as never);
+    setShowGlobalDataset(false);
+    setShowPopulationOverlay(true);
+    setShowInfrastructureAssets(true);
+
+    void runAssetHeatRiskQuery({
+      request_mode: "admin",
+      mode: "admin",
+      country_id: selectedArea.countryId,
+      country_name: selectedArea.countryName,
+      admin_level: selectedArea.adminLevel,
+      admin_id: selectedArea.adminId,
+      admin_name: selectedArea.adminName,
+      asset_id: selectedAsset?.asset_id,
+      asset_query: selectedAsset?.asset_name ?? typedQuery,
+      asset_types: selectedAsset ? [selectedAsset.asset_type] : null,
+      threshold: manualHeatThresholdRef.current,
+      h3_resolution: h3Resolution,
+      buffer_km: assetBufferKm,
+      include_population: true,
+    });
+  }, [
+    assetBufferKm,
+    assetLookupText,
+    h3Resolution,
+    runAssetHeatRiskQuery,
+    selectedAsset,
+    selectedArea,
+    setActiveLayer,
+    setShowGlobalDataset,
+  ]);
+
+  useEffect(() => {
+    if (!mapboxMap) {
+      setBoundaryLoad({
+        status: "waiting_for_map",
+        message: "Waiting for Mapbox map to initialize...",
+        percent: 5,
+      });
+
+      return;
+    }
+
+    if (!adminBoundaryConfig) {
+      return;
+    }
+
+    let cancelled = false;
+    const abortController = new AbortController();
+    let cleanupHandlers: (() => void) | null = null;
+
+    const safeGetLayer = (id: string) => {
+      try {
+        return mapboxMap.getLayer(id);
+      } catch {
+        return undefined;
+      }
+    };
+
+    const safeGetSource = (id: string) => {
+      try {
+        return mapboxMap.getSource(id);
+      } catch {
+        return undefined;
+      }
+    };
+
+    const addLayerIfMissing = (layer: mapboxgl.AnyLayer) => {
+      if (!safeGetLayer(layer.id)) {
+        mapboxMap.addLayer(layer);
+      }
+    };
+
+    const setAdminHoverFilter = (adminId: string | null) => {
+      const filter = buildAdminFilter(adminId);
+
+      try {
+        if (safeGetLayer(adminHoverFillLayerId)) {
+          mapboxMap.setFilter(adminHoverFillLayerId, filter);
+        }
+
+        if (safeGetLayer(adminHoverOutlineLayerId)) {
+          mapboxMap.setFilter(adminHoverOutlineLayerId, filter);
+        }
+      } catch (error) {
+        console.warn("Could not update admin hover filter:", error);
+      }
+    };
+
+    const attachAdminHandlers = () => {
+      const handleMouseMove = (event: mapboxgl.MapLayerMouseEvent) => {
+        const feature = event.features?.[0];
+
+        if (!feature || !feature.properties) return;
+
+        const adminId = getStringProperty(feature.properties, "admin_id");
+
+        mapboxMap.getCanvas().style.cursor = "pointer";
+        setAdminHoverFilter(adminId);
+      };
+
+      const handleMouseLeave = () => {
+        mapboxMap.getCanvas().style.cursor = "";
+        setAdminHoverFilter(null);
+      };
+
+      const handleClick = (event: mapboxgl.MapLayerMouseEvent) => {
+        const feature = event.features?.[0];
+
+        if (!feature || !feature.properties || !feature.geometry) return;
+
+        const adminId = getStringProperty(feature.properties, "admin_id");
+        const adminName = getStringProperty(
+          feature.properties,
+          "admin_name",
+          adminId,
+        );
+        const adminLevel = getStringProperty(
+          feature.properties,
+          "admin_level",
+          adminBoundaryConfig.adminLevel,
+        );
+        const countryId = getStringProperty(
+          feature.properties,
+          "country_id",
+          adminBoundaryConfig.countryId,
+        );
+        const countryName = getStringProperty(
+          feature.properties,
+          "country_name",
+          adminBoundaryConfig.countryName,
+        );
+
+        setSelectedArea({
+          countryId,
+          countryName,
+          adminId,
+          adminName,
+          adminLevel,
+          displayAdminLevel: adminBoundaryConfig.adminLevel,
+          geometry: feature.geometry as GeoJSON.Geometry,
+        });
+
+        popupRef.current?.remove();
+        popupRef.current = null;
+      };
+
+      mapboxMap.on("mousemove", adminFillLayerId, handleMouseMove);
+      mapboxMap.on("mouseleave", adminFillLayerId, handleMouseLeave);
+      mapboxMap.on("click", adminFillLayerId, handleClick);
+
+      return () => {
+        mapboxMap.off("mousemove", adminFillLayerId, handleMouseMove);
+        mapboxMap.off("mouseleave", adminFillLayerId, handleMouseLeave);
+        mapboxMap.off("click", adminFillLayerId, handleClick);
+      };
+    };
+
+    const addAdminLayers = (adminGeoJson: GeoJSON.FeatureCollection) => {
+      if (cancelled) return;
+
+      setBoundaryLoad({
+        status: "adding_layers",
+        message: `Adding clickable ${adminBoundaryConfig.unitPluralLower} layers to the map...`,
+        percent: 86,
+        featureCount: adminGeoJson.features.length,
+      });
+
+      const existingSource = safeGetSource(adminSourceId);
+
+      if (existingSource) {
+        (existingSource as mapboxgl.GeoJSONSource).setData(adminGeoJson);
+      } else {
+        mapboxMap.addSource(adminSourceId, {
+          type: "geojson",
+          data: adminGeoJson,
+          promoteId: "admin_id",
+        });
+      }
+
+      addLayerIfMissing({
+        id: adminFillLayerId,
+        type: "fill",
+        source: adminSourceId,
+        paint: {
+          "fill-color": "#111827",
+          "fill-opacity": 0.035,
+        },
+      });
+
+      addLayerIfMissing({
+        id: adminOutlineLayerId,
+        type: "line",
+        source: adminSourceId,
+        paint: {
+          "line-color": "#111827",
+          "line-width": 0.7,
+          "line-opacity": 0.45,
+        },
+      });
+
+      addLayerIfMissing({
+        id: adminHoverFillLayerId,
+        type: "fill",
+        source: adminSourceId,
+        filter: noAdminFilter,
+        paint: {
+          "fill-color": "#f97316",
+          "fill-opacity": 0.16,
+        },
+      });
+
+      addLayerIfMissing({
+        id: adminHoverOutlineLayerId,
+        type: "line",
+        source: adminSourceId,
+        filter: noAdminFilter,
+        paint: {
+          "line-color": "#f97316",
+          "line-width": 2,
+          "line-opacity": 0.85,
+        },
+      });
+
+      addLayerIfMissing({
+        id: adminSelectedFillLayerId,
+        type: "fill",
+        source: adminSourceId,
+        filter: noAdminFilter,
+        paint: {
+          "fill-color": "#ea580c",
+          "fill-opacity": 0.18,
+        },
+      });
+
+      addLayerIfMissing({
+        id: adminSelectedOutlineLayerId,
+        type: "line",
+        source: adminSourceId,
+        filter: noAdminFilter,
+        paint: {
+          "line-color": "#c2410c",
+          "line-width": 2.8,
+          "line-opacity": 0.95,
+        },
+      });
+
+      cleanupHandlers?.();
+      cleanupHandlers = attachAdminHandlers();
+
+      const bounds = featureCollectionBounds(adminGeoJson);
+
+      if (bounds) {
+        mapboxMap.fitBounds(bounds, {
+          padding: { top: 80, bottom: 80, left: 340, right: 80 },
+          duration: 700,
+          maxZoom: adminBoundaryConfig.adminLevel === "adm0" ? 8 : 9.5,
+        });
+      }
+
+      setBoundaryLoad({
+        status: "ready",
+        message: `Loaded ${adminGeoJson.features.length} ${adminBoundaryConfig.unitPluralLower} boundaries.`,
+        percent: 100,
+        featureCount: adminGeoJson.features.length,
+      });
+    };
+
+    const waitForMapStyle = async () => {
+      setBoundaryLoad({
+        status: "waiting_for_map",
+        message: "Waiting for Mapbox style to finish loading...",
+        percent: 8,
+      });
+
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        if (cancelled) return false;
+
+        try {
+          if (mapboxMap.loaded() || mapboxMap.isStyleLoaded()) {
+            return true;
+          }
+        } catch {
+          // Keep polling.
+        }
+
+        await sleep(100);
+      }
+
+      return false;
+    };
+
+    const loadAdminBoundaries = async () => {
+      try {
+        const styleReady = await waitForMapStyle();
+
+        if (!styleReady || cancelled) {
+          if (!cancelled) {
+            throw new Error("Mapbox style did not become ready in time.");
+          }
+
+          return;
+        }
+
+        const geoJson = await fetchAdminBoundaryGeoJsonWithProgress(
+          adminBoundaryConfig,
+          abortController.signal,
+          setBoundaryLoad,
+        );
+
+        if (cancelled) return;
+
+        addAdminLayers(geoJson);
+      } catch (error) {
+        if (cancelled || abortController.signal.aborted) return;
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : `Unknown ${adminBoundaryConfig.unitLabelLower} boundary loading error.`;
+
+        console.warn(
+          `Could not load ${adminBoundaryConfig.countryName} ${adminBoundaryConfig.unitLabelLower} layer:`,
+          error,
+        );
+
+        setBoundaryLoad({
+          status: "error",
+          message: `${adminBoundaryConfig.unitLabel} boundaries could not be loaded.`,
+          percent: 0,
+          error: message,
+        });
+      }
+    };
+
+    void loadAdminBoundaries();
+
+    const handleStyleData = () => {
+      const cachedGeoJson = cachedAdminGeoJsonByKey[adminBoundaryConfig.cacheKey];
+
+      if (
+        cancelled ||
+        !cachedGeoJson ||
+        !mapboxMap.isStyleLoaded() ||
+        safeGetSource(adminSourceId)
+      ) {
+        return;
+      }
+
+      try {
+        addAdminLayers(cachedGeoJson);
+      } catch (error) {
+        console.warn(
+          `Could not restore ${adminBoundaryConfig.unitLabelLower} layers after style change:`,
+          error,
+        );
+      }
+    };
+
+    mapboxMap.on("styledata", handleStyleData);
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+      cleanupHandlers?.();
+      mapboxMap.off("styledata", handleStyleData);
+      mapboxMap.getCanvas().style.cursor = "";
+    };
+  }, [adminBoundaryConfig, boundaryLoadAttempt, mapboxMap]);
+
+  useEffect(() => {
+    if (!mapboxMap) return;
+
+    const filter = buildAdminFilter(selectedArea?.adminId ?? null);
+
+    try {
+      if (mapboxMap.getLayer(adminSelectedFillLayerId)) {
+        mapboxMap.setFilter(adminSelectedFillLayerId, filter);
+      }
+
+      if (mapboxMap.getLayer(adminSelectedOutlineLayerId)) {
+        mapboxMap.setFilter(adminSelectedOutlineLayerId, filter);
+      }
+    } catch (error) {
+      console.warn("Could not update selected admin filter:", error);
+    }
+  }, [mapboxMap, selectedArea]);
+
+  const handleRerunHeatExposure = () => {
+    if (!activeAnalysisGeometry) return;
+
+    runHeatExposureAnalysis(activeAnalysisGeometry, selectedArea ?? undefined);
+  };
+
+  const handleRunSelectedAreaAnalysis = () => {
+    if (!selectedArea) return;
+
+    runHeatExposureAnalysis(selectedArea.geometry, selectedArea);
+  };
 
   const handleClearAnalysis = () => {
     popupRef.current?.remove();
@@ -166,177 +1667,65 @@ const MapCanvas = ({
       console.warn("Could not clear drawn polygon:", error);
     }
 
-    setActiveLayer(null);
+    setSelectedArea(null);
+    setActiveLayer("manual_heat_risk" as never);
     setShowGlobalDataset(false);
-    setShowPopulationOverlay(false);
-    setShowInfrastructureAssets(false);
-
     clearSpatialQuery();
     onDrawGeometry(null);
   };
 
-  useEffect(() => {
-    if (!mapboxMap || !drawnGeometry) {
-      if (popupRef.current) {
-        popupRef.current.remove();
-        popupRef.current = null;
-      }
+  const handleCountryChange = (countryId: string) => {
+    if (countryId === selectedCountryId) return;
 
-      return;
-    }
+    popupRef.current?.remove();
+    popupRef.current = null;
 
-    const center = getGeometryCenter(drawnGeometry);
+    const nextCountry =
+      regions.find((country) => country.country_id === countryId) ?? null;
+    const nextLevels = getPreferredAdminLevels(nextCountry);
 
-    if (center[0] === 0 && center[1] === 0) return;
+    setSelectedCountryId(countryId);
+    setSelectedAdminLevel(nextLevels[0] ?? "adm0");
+  };
 
-    const container = document.createElement("div");
-    container.className = "p-2 text-neutral-900 font-sans";
-    container.innerHTML = `
-      <p class="mb-2 text-xs font-bold text-neutral-700">Select Manual Analysis:</p>
+  const handleAdminLevelChange = (nextLevel: string) => {
+    if (nextLevel === selectedAdminLevel) return;
 
-      <div class="flex flex-col gap-1.5">
-        <button id="btn-temp-stats" class="w-full cursor-pointer rounded-lg bg-neutral-950 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">
-          Calculate Air Temp Stats
-        </button>
+    popupRef.current?.remove();
+    popupRef.current = null;
 
-        <button id="btn-heat-stress" class="w-full cursor-pointer rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700">
-          Get Mean Wet-Bulb Temp
-        </button>
+    setSelectedAdminLevel(nextLevel);
+    setSelectedArea(null);
+    setAssetOptions([]);
+    setSelectedAssetId("");
+    setAssetLookupText("");
+    setAssetLookupError(null);
+    setBoundaryLoadAttempt((attempt) => attempt + 1);
+    clearSpatialQuery();
+    onDrawGeometry(null);
+  };
 
-        <div class="mt-1 rounded-lg border border-orange-100 bg-orange-50 p-2">
-          <label for="manual-heat-threshold" class="mb-1 block text-[10px] font-bold uppercase tracking-wide text-orange-700">
-            Heat threshold (°C)
-          </label>
-          <input
-            id="manual-heat-threshold"
-            type="number"
-            min="10"
-            max="45"
-            step="0.5"
-            value="${manualHeatThresholdRef.current}"
-            class="w-full rounded-md border border-orange-200 bg-white px-2 py-1 text-xs font-semibold text-neutral-900 outline-none focus:border-orange-500"
-          />
-        </div>
+  const handleResetAnalysisSettings = () => {
+    const defaults = defaultAnalysisSettings;
 
-        <button id="btn-manual-heat-risk" class="w-full cursor-pointer rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-700">
-          Run Heat Exposure Analysis
-        </button>
-      </div>
-    `;
-
-    if (popupRef.current) {
-      popupRef.current.remove();
-    }
-
-    const popup = new mapboxgl.Popup({
-      closeOnClick: false,
-      closeButton: true,
-    })
-      .setLngLat(center)
-      .setDOMContent(container)
-      .addTo(mapboxMap);
-
-    popupRef.current = popup;
-
-    const handleTempStats = () => {
-      setActiveLayer("tas");
-      setShowGlobalDataset(false);
-      setShowPopulationOverlay(false);
-      setShowInfrastructureAssets(false);
-
-      runSpatialQuery(
-        drawnGeometry,
-        { "Near-Surface Air Temp (TAS)": true },
-        "zonal_stats"
-      );
-
-      popup.remove();
-    };
-
-    const handleHeatStress = () => {
-      setActiveLayer("wet_bulb");
-      setShowGlobalDataset(false);
-      setShowPopulationOverlay(false);
-      setShowInfrastructureAssets(false);
-
-      runSpatialQuery(
-        drawnGeometry,
-        { "Annual Mean Wet-Bulb (WBT)": true },
-        "heat_stress"
-      );
-
-      popup.remove();
-    };
-
-    const handleManualHeatRisk = () => {
-      const thresholdInput = container.querySelector<HTMLInputElement>(
-        "#manual-heat-threshold"
-      );
-
-      const parsedThreshold = Number(thresholdInput?.value);
-      const threshold = Number.isFinite(parsedThreshold)
-        ? parsedThreshold
-        : manualHeatThresholdRef.current;
-
-      manualHeatThresholdRef.current = threshold;
-      setManualHeatThreshold(threshold);
-
-      setActiveLayer("manual_heat_risk" as never);
-      setShowGlobalDataset(false);
-      setShowPopulationOverlay(false);
-      setShowInfrastructureAssets(false);
-
-      runSpatialQuery(
-        drawnGeometry,
-        { "Manual Heat Risk": true },
-        "manual_heat_risk",
-        {
-          threshold,
-          risk_metric: "heat",
-          asset_types: ["hospital", "school", "port"],
-          comparison_operator: ">=",
-          include_population: true,
-          include_assets: true,
-          return_layers: {
-            risk_grid: true,
-            sampled_assets: true,
-            ranked_assets: true,
-          },
-        }
-      );
-
-      popup.remove();
-    };
-
-    const tempBtn = container.querySelector<HTMLButtonElement>("#btn-temp-stats");
-    const heatBtn =
-      container.querySelector<HTMLButtonElement>("#btn-heat-stress");
-    const manualHeatRiskBtn = container.querySelector<HTMLButtonElement>(
-      "#btn-manual-heat-risk"
-    );
-
-    tempBtn?.addEventListener("click", handleTempStats);
-    heatBtn?.addEventListener("click", handleHeatStress);
-    manualHeatRiskBtn?.addEventListener("click", handleManualHeatRisk);
-
-    return () => {
-      tempBtn?.removeEventListener("click", handleTempStats);
-      heatBtn?.removeEventListener("click", handleHeatStress);
-      manualHeatRiskBtn?.removeEventListener("click", handleManualHeatRisk);
-
-      popup.remove();
-
-      if (popupRef.current === popup) {
-        popupRef.current = null;
-      }
-    };
-  }, [
-    mapboxMap,
-    drawnGeometry,
-    runSpatialQuery,
-    setActiveLayer,
-    setShowGlobalDataset,
-  ]);
+    setSelectedCountryId(defaults.defaultCountryId);
+    setSelectedAdminLevel(defaults.defaultAdminLevel);
+    setManualHeatThreshold(defaults.heatThreshold);
+    manualHeatThresholdRef.current = defaults.heatThreshold;
+    setH3Resolution(defaults.h3Resolution);
+    setAssetBufferKm(defaults.assetBufferKm);
+    setHeatDisplayMode(defaults.heatDisplayMode);
+    setShowPopulationOverlay(defaults.showPopulationOverlay);
+    setShowInfrastructureAssets(defaults.showInfrastructureAssets);
+    setSelectedArea(null);
+    setAssetOptions([]);
+    setSelectedAssetId("");
+    setAssetLookupText("");
+    setAssetLookupError(null);
+    setBoundaryLoadAttempt((attempt) => attempt + 1);
+    clearSpatialQuery();
+    onDrawGeometry(null);
+  };
 
   return (
     <div className="absolute inset-0">
@@ -350,15 +1739,12 @@ const MapCanvas = ({
 
       {mapboxMap && (
         <>
-          <SearchBar map={mapboxMap} />
-
-          <DrawControls map={mapboxMap} onDrawGeometry={onDrawGeometry} />
-
           <FeatureHighlighter
             mapboxMap={mapboxMap}
-            highlightedFeatures={highlightedFeatures}
+            highlightedFeatures={highlightedFeaturesForMap}
             showPopulationOverlay={showPopulationOverlay}
             showInfrastructureAssets={showInfrastructureAssets}
+            heatDisplayMode={heatDisplayMode}
           />
 
           <SpatialQueryPanel
@@ -379,322 +1765,601 @@ const MapCanvas = ({
                     Running spatial analysis
                   </div>
                   <div className="text-[10px] font-medium text-neutral-500">
-                    Fetching forecast uncertainty and calculating exposure...
+                    Fetching forecast spread and population...
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {(drawnGeometry || highlightedFeatures?.length) && (
+          {(selectedArea || highlightedFeatures?.length) && (
             <button
               onClick={handleClearAnalysis}
-              className="absolute right-3 top-28 z-[1200] rounded-xl border border-black/5 bg-white/95 px-3 py-2 text-xs font-bold text-neutral-700 shadow-lg backdrop-blur-md hover:bg-neutral-100"
+              className="absolute right-4 top-4 z-[1200] rounded-xl border border-black/5 bg-white/95 px-3 py-2 text-xs font-bold text-neutral-700 shadow-lg backdrop-blur-md hover:bg-neutral-100"
             >
               Clear analysis
             </button>
           )}
 
-          <div className="absolute bottom-16 left-4 z-20 w-[300px] rounded-2xl border border-black/5 bg-white/90 p-4 shadow-lg backdrop-blur-md transition-all duration-300">
-            <div className="flex items-center justify-between">
+          <div className="absolute bottom-16 left-4 top-6 z-20 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                Map Layers
+                Analysis controls
               </span>
 
               <button
                 onClick={() => setIsLegendExpanded(!isLegendExpanded)}
                 className="cursor-pointer text-xs font-semibold text-neutral-500 hover:text-neutral-900"
               >
-                {isLegendExpanded ? "Collapse" : "Expand"}
+                {isLegendExpanded ? "Hide" : "Show"}
               </button>
             </div>
 
             {isLegendExpanded && (
-              <div className="mt-3 flex flex-col gap-3">
-                <div className="flex rounded-xl bg-neutral-100 p-0.5">
-                  <button
-                    onClick={() => {
-                      if (currentActiveLayer !== "tas") {
-                        setActiveLayer("tas");
-                        setShowGlobalDataset(true);
-                        setShowPopulationOverlay(false);
-                        setShowInfrastructureAssets(false);
-                      } else if (showGlobalDataset) {
-                        setShowGlobalDataset(false);
-                      } else {
-                        setActiveLayer(null);
-                      }
-                    }}
-                    className={`flex-1 cursor-pointer rounded-lg py-1.5 text-center text-xs font-semibold transition ${
-                      currentActiveLayer === "tas"
-                        ? `bg-white shadow-sm ${
-                            showGlobalDataset
-                              ? "font-bold text-neutral-950"
-                              : "font-medium text-neutral-500 opacity-75"
-                          }`
-                        : "text-neutral-500 hover:text-neutral-900"
-                    }`}
-                  >
-                    Air
-                  </button>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-orange-500">
+                      Region
+                    </div>
 
-                  <button
-                    onClick={() => {
-                      if (currentActiveLayer !== "wet_bulb") {
-                        setActiveLayer("wet_bulb");
-                        setShowGlobalDataset(true);
-                        setShowPopulationOverlay(false);
-                        setShowInfrastructureAssets(false);
-                      } else if (showGlobalDataset) {
-                        setShowGlobalDataset(false);
-                      } else {
-                        setActiveLayer(null);
-                      }
-                    }}
-                    className={`flex-1 cursor-pointer rounded-lg py-1.5 text-center text-xs font-semibold transition ${
-                      currentActiveLayer === "wet_bulb"
-                        ? `bg-white shadow-sm ${
-                            showGlobalDataset
-                              ? "font-bold text-neutral-950"
-                              : "font-medium text-neutral-500 opacity-75"
-                          }`
-                        : "text-neutral-500 hover:text-neutral-900"
-                    }`}
-                  >
-                    WBT
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (currentActiveLayer !== "manual_heat_risk") {
-                        setActiveLayer("manual_heat_risk" as never);
-                        setShowGlobalDataset(false);
-                      } else {
-                        setActiveLayer(null);
-                        setShowPopulationOverlay(false);
-                        setShowInfrastructureAssets(false);
-                      }
-                    }}
-                    className={`flex-1 cursor-pointer rounded-lg py-1.5 text-center text-xs font-semibold transition ${
-                      currentActiveLayer === "manual_heat_risk"
-                        ? "bg-white font-bold text-orange-700 shadow-sm"
-                        : "text-neutral-500 hover:text-neutral-900"
-                    }`}
-                  >
-                    Heat
-                  </button>
-                </div>
-
-                {currentActiveLayer && (
-                  <div className="border-t border-neutral-100 pt-3">
-                    {currentActiveLayer === "manual_heat_risk" ? (
-                      <div>
-                        <div className="mb-2 flex flex-col gap-0.5">
-                          <span className="text-xs font-bold text-neutral-800">
-                            Heat Exposure
-                          </span>
-                          <span className="text-[10px] text-neutral-400">
-                            Darker orange = higher chance of crossing threshold
-                          </span>
-                          <div className="mt-1 flex items-center gap-2">
-  <label className="text-[10px] font-semibold text-orange-600">
-    Threshold
-  </label>
-
-  <input
-    type="number"
-    min="10"
-    max="45"
-    step="0.5"
-    value={manualHeatThreshold}
-    onChange={(event) => {
-      const nextValue = Number(event.target.value);
-
-      if (Number.isFinite(nextValue)) {
-        setManualHeatThreshold(nextValue);
-        manualHeatThresholdRef.current = nextValue;
-      }
-    }}
-    className="h-7 w-16 rounded-lg border border-orange-100 bg-orange-50 px-2 text-[11px] font-bold text-orange-700 outline-none focus:border-orange-400"
-  />
-
-  <span className="text-[10px] font-semibold text-orange-600">°C</span>
-
-  <button
-    onClick={handleRerunHeatExposure}
-    disabled={!drawnGeometry || isQuerying}
-    className="ml-auto rounded-lg bg-orange-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-200"
-  >
-    Rerun
-  </button>
-</div>
-                        </div>
-
-                        <div
-  className="h-2 w-full rounded-full"
-  style={{
-    background:
-      "linear-gradient(to right, #fff7ed, #ffedd5, #fdba74, #fb923c, #ea580c, #7c2d12)",
-  }}
-/>
-
-                        <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
-                          <span>0%</span>
-                          <span>25%</span>
-                          <span>50%</span>
-                          <span>75%</span>
-                          <span>100%</span>
-                        </div>
-
-                        <div className="mt-3 text-[10px] font-bold uppercase tracking-wide text-neutral-400">
-                          Optional overlays
-                        </div>
-
-                        <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-purple-50 px-3 py-2">
-                          <span className="text-[10px] font-bold text-purple-700">
-                            Expected exposed population
-                          </span>
-
-                          <input
-                            type="checkbox"
-                            checked={showPopulationOverlay}
-                            onChange={(event) =>
-                              setShowPopulationOverlay(event.target.checked)
-                            }
-                            className="h-4 w-4 cursor-pointer accent-purple-600"
-                          />
-                        </label>
-                        {showPopulationOverlay && (
-  <div className="mt-2 rounded-xl bg-purple-50/80 p-2">
-    <div className="mb-1 text-[10px] font-bold text-purple-800">
-      Expected exposed people
-    </div>
-
-    <div className="text-[10px] leading-snug text-purple-700">
-      Circle size represents the expected number of people exposed above the
-      selected heat threshold.
-    </div>
-
-    <div className="mt-2 flex items-end justify-between gap-2 px-1">
-      <div className="flex flex-col items-center gap-1">
-        <div className="h-2.5 w-2.5 rounded-full border border-purple-500 bg-purple-400/60" />
-        <div className="text-[9px] font-semibold text-purple-700">
-          ~1k
-        </div>
-      </div>
-
-      <div className="flex flex-col items-center gap-1">
-        <div className="h-5 w-5 rounded-full border border-purple-500 bg-purple-400/60" />
-        <div className="text-[9px] font-semibold text-purple-700">
-          ~6k
-        </div>
-      </div>
-
-      <div className="flex flex-col items-center gap-1">
-        <div className="h-7 w-7 rounded-full border border-purple-500 bg-purple-400/60" />
-        <div className="text-[9px] font-semibold text-purple-700">
-          15k+
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-                        <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-sky-50 px-3 py-2">
-                          <span className="text-[10px] font-bold text-sky-700">
-                            Infrastructure assets
-                          </span>
-
-                          <input
-                            type="checkbox"
-                            checked={showInfrastructureAssets}
-                            onChange={(event) =>
-                              setShowInfrastructureAssets(event.target.checked)
-                            }
-                            className="h-4 w-4 cursor-pointer accent-sky-600"
-                          />
-                        </label>
-
-                        <div className="mt-3">
-                          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-neutral-400">
-                            Uncertainty
-                          </div>
-
-                          <div className="flex items-end gap-2 text-[10px] font-semibold text-neutral-500">
-                            <div className="flex flex-1 flex-col gap-1">
-                              <div className="border-t border-neutral-200" />
-                              <span>Low</span>
-                            </div>
-
-                            <div className="flex flex-1 flex-col gap-1">
-                              <div className="border-t border-orange-300" />
-                              <span>Med</span>
-                            </div>
-
-                            <div className="flex flex-1 flex-col gap-1">
-                              <div className="border-t-2 border-orange-900" />
-                              <span>High</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <p className="mt-2 text-[10px] leading-snug text-neutral-500">
-                          Borders become more visible where the forecast spread
-                          is larger.
-                        </p>
-                      </div>
-                    ) : currentActiveLayer === "tas" ? (
-                      <div>
-                        <div className="mb-2 flex flex-col gap-0.5">
-                          <span className="text-xs font-bold text-neutral-800">
-                            Near-Surface Air Temp
-                          </span>
-                          <span className="text-[10px] text-neutral-400">
-                            Degrees Celsius (°C)
-                          </span>
-                        </div>
-
-                        <div
-                          className="h-2 w-full rounded-full"
-                          style={{
-                            background:
-                              "linear-gradient(to right, #3b82f6, #eab308, #ef4444)",
-                          }}
-                        />
-
-                        <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
-                          <span>20°C</span>
-                          <span>25°C</span>
-                          <span>30°C</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="mb-2 flex flex-col gap-0.5">
-                          <span className="text-xs font-bold text-neutral-800">
-                            Annual Mean Wet-Bulb
-                          </span>
-                          <span className="text-[10px] text-neutral-400">
-                            Degrees Celsius (°C)
-                          </span>
-                        </div>
-
-                        <div
-                          className="h-2 w-full rounded-full"
-                          style={{
-                            background:
-                              "linear-gradient(to right, #10b981, #f59e0b, #ef4444, #d946ef)",
-                          }}
-                        />
-
-                        <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
-                          <span>15°C</span>
-                          <span>20°C</span>
-                          <span>24°C</span>
-                          <span>27°C</span>
-                        </div>
+                    {!boundaryLayerReady && (
+                      <div className="text-[10px] font-bold text-orange-700">
+                        {Math.round(boundaryLoad.percent)}%
                       </div>
                     )}
+                  </div>
+
+                  <label className="mt-2 block">
+                    <span className="text-[10px] font-bold text-orange-700">
+                      Country / territory
+                    </span>
+
+                    <select
+                      value={selectedCountryId}
+                      onChange={(event) => handleCountryChange(event.target.value)}
+                      disabled={isLoadingRegions || regions.length === 0}
+                      className="mt-1 h-9 w-full rounded-lg border border-orange-100 bg-white px-2 text-xs font-bold text-orange-950 outline-none focus:border-orange-400 disabled:cursor-not-allowed disabled:bg-orange-100 disabled:text-orange-300"
+                    >
+                      {regions.map((country) => (
+                        <option key={country.country_id} value={country.country_id}>
+                          {country.country_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {selectedCountry && (
+                    <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-orange-100 p-1">
+                      {availableAdminLevels.map((level) => (
+                        <button
+                          key={level}
+                          onClick={() => handleAdminLevelChange(level)}
+                          className={`rounded-lg px-2 py-1.5 text-[10px] font-bold transition ${
+                            selectedAdminLevel === level
+                              ? "bg-white text-orange-800 shadow-sm"
+                              : "text-orange-500 hover:text-orange-900"
+                          }`}
+                        >
+                          {getAdminLevelLabel(selectedCountry.country_id, level)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedCountry && (
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] font-bold">
+                      <div
+                        className={`rounded-lg px-2 py-1 ${
+                          selectedCountry.population?.status === "ready"
+                            ? "bg-white text-emerald-700"
+                            : "bg-white/70 text-neutral-400"
+                        }`}
+                      >
+                        Population: {selectedCountry.population?.status ?? "unknown"}
+                      </div>
+
+                      <div
+                        className={`rounded-lg px-2 py-1 ${
+                          selectedCountry.assets?.status === "ready"
+                            ? "bg-white text-blue-700"
+                            : "bg-white/70 text-neutral-400"
+                        }`}
+                      >
+                        Assets:{" "}
+                        {formatCompactNumber(selectedCountry.assets?.asset_count)}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedArea ? (
+                    <div className="mt-2">
+                      <div className="text-sm font-bold text-orange-950">
+                        {selectedArea.adminName}
+                      </div>
+                      <div className="text-[10px] font-medium text-orange-700">
+                        {selectedArea.countryName} ·{" "}
+                        {getAdminLevelLabel(
+                          selectedArea.countryId,
+                          selectedArea.displayAdminLevel,
+                        )}{" "}
+                        · {selectedArea.adminId}
+                      </div>
+
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={handleRunSelectedAreaAnalysis}
+                          disabled={isQuerying}
+                          className="flex-1 rounded-lg bg-orange-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-200"
+                        >
+                          Run area
+                        </button>
+
+                        <button
+                          onClick={() => setSelectedArea(null)}
+                          className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-orange-700 hover:bg-orange-100"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  ) : regionsError ? (
+                    <div className="mt-2">
+                      <div className="text-[10px] leading-snug text-red-700">
+                        Region registry could not be loaded.
+                      </div>
+
+                      <div className="mt-1 rounded-lg bg-white/70 p-2 text-[9px] leading-snug text-red-600">
+                        {regionsError}
+                      </div>
+                    </div>
+                  ) : boundaryLoad.status === "error" ? (
+                    <div className="mt-2">
+                      <div className="text-[10px] leading-snug text-red-700">
+                        {boundaryLoad.message}
+                      </div>
+
+                      {boundaryLoad.error && (
+                        <div className="mt-1 rounded-lg bg-white/70 p-2 text-[9px] leading-snug text-red-600">
+                          {boundaryLoad.error}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() =>
+                          setBoundaryLoadAttempt((attempt) => attempt + 1)
+                        }
+                        className="mt-2 rounded-lg bg-red-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-red-700"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : boundaryLayerReady && adminBoundaryConfig ? (
+                    <div className="mt-2 text-[10px] leading-snug text-orange-800">
+                      Click a {adminBoundaryConfig.unitLabelLower} on the map.
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <div className="text-[10px] leading-snug text-orange-800">
+                        {boundaryLoad.message}
+                      </div>
+
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-orange-100">
+                        <div
+                          className="h-full rounded-full bg-orange-500 transition-all duration-300"
+                          style={{
+                            width: `${Math.max(
+                              3,
+                              Math.min(100, boundaryLoad.percent),
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 rounded-xl border border-orange-100 bg-white p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-orange-500">
+                    Active analysis
+                  </div>
+                  <div className="mt-1 text-sm font-bold text-neutral-950">
+                    Heat exposure
+                  </div>
+                  <p className="mt-1 text-[10px] leading-snug text-neutral-500">
+                    Heat is the default workflow. Select a country, admin scale,
+                    and area, then run heat risk or analyze an infrastructure
+                    asset.
+                  </p>
+                </div>
+
+                {currentActiveLayer === "manual_heat_risk" && (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                          Threshold
+                        </label>
+
+                        <input
+                          type="number"
+                          min="10"
+                          max="45"
+                          step="0.5"
+                          value={manualHeatThreshold}
+                          onChange={(event) => {
+                            const nextValue = Number(event.target.value);
+
+                            if (Number.isFinite(nextValue)) {
+                              setManualHeatThreshold(nextValue);
+                              manualHeatThresholdRef.current = nextValue;
+                            }
+                          }}
+                          className="h-7 w-16 rounded-lg border border-orange-100 bg-white px-2 text-[11px] font-bold text-orange-700 outline-none focus:border-orange-400"
+                        />
+
+                        <span className="text-[10px] font-semibold text-orange-600">
+                          °C
+                        </span>
+
+                        <button
+                          onClick={handleRerunHeatExposure}
+                          disabled={!activeAnalysisGeometry || isQuerying}
+                          className="ml-auto rounded-lg bg-orange-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-200"
+                        >
+                          Rerun
+                        </button>
+                      </div>
+
+                      {hasHeatResult && (
+                        <div className="mt-2 rounded-lg bg-white p-2 text-[10px] text-neutral-600">
+                          <span className="font-bold text-neutral-900">
+                            Current:
+                          </span>{" "}
+                          {isAssetResult
+                            ? formatMetadataValue(
+                                queryMetadata?.matched_asset?.asset_name ??
+                                  queryMetadata?.asset_query,
+                              )
+                            : formatMetadataValue(
+                                queryMetadata?.admin_name ??
+                                  selectedArea?.adminName ??
+                                  "selected area",
+                              )}
+                          {" · "}
+                          {formatCompactNumber(
+                            queryMetadata?.h3_cell_count ??
+                              queryMetadata?.grid_cell_count,
+                          )}{" "}
+                          cells
+                          {queryMetadata?.mean_exposure_probability !==
+                            undefined && (
+                            <>
+                              {" · "}
+                              {formatPercentValue(
+                                queryMetadata.mean_exposure_probability,
+                              )}{" "}
+                              mean risk
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-neutral-100 bg-white p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                            Analysis settings
+                          </div>
+                          <p className="mt-1 text-[10px] leading-snug text-neutral-500">
+                            Saved locally. These defaults control the next heat
+                            or asset run.
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={handleResetAnalysisSettings}
+                          className="rounded-lg bg-neutral-100 px-2 py-1 text-[10px] font-bold text-neutral-600 hover:bg-neutral-200"
+                        >
+                          Reset
+                        </button>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <label className="block">
+                          <span className="text-[10px] font-bold text-neutral-500">
+                            H3 grid
+                          </span>
+
+                          <select
+                            value={h3Resolution}
+                            onChange={(event) =>
+                              setH3Resolution(Number(event.target.value))
+                            }
+                            className="mt-1 h-8 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2 text-[11px] font-bold text-neutral-700 outline-none focus:border-orange-400"
+                          >
+                            <option value={5}>5 · coarse</option>
+                            <option value={6}>6 · balanced</option>
+                            <option value={7}>7 · detailed</option>
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="text-[10px] font-bold text-neutral-500">
+                            Default view
+                          </span>
+
+                          <select
+                            value={heatDisplayMode}
+                            onChange={(event) =>
+                              setHeatDisplayMode(
+                                event.target.value as HeatDisplayMode,
+                              )
+                            }
+                            className="mt-1 h-8 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2 text-[11px] font-bold text-neutral-700 outline-none focus:border-orange-400"
+                          >
+                            <option value="combined">Both</option>
+                            <option value="risk">Risk</option>
+                            <option value="uncertainty">Spread</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <p className="mt-2 text-[9px] leading-snug text-neutral-400">
+                        Also saved: country, admin scale, threshold, asset
+                        buffer, and overlay toggles.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500">
+                            Asset lookup
+                          </div>
+                          <div className="text-[10px] text-blue-700">
+                            Pick from assets found inside the selected area.
+                          </div>
+                        </div>
+
+                        {selectedArea && (
+                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-blue-600">
+                            {isLoadingAssets
+                              ? "loading"
+                              : `${assetOptions.length} assets`}
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedArea &&
+                      !isLoadingAssets &&
+                      !assetLookupError &&
+                      assetOptions.length === 0 ? (
+                        <div className="mt-2 rounded-lg border border-blue-100 bg-white/90 p-2 text-[10px] leading-snug text-blue-700">
+                          No supported OSM assets were found in {selectedArea.adminName}.
+                          The asset analyzer is hidden for this area unless
+                          asset data is added later.
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            list="admin-asset-options"
+                            value={assetLookupText}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              const matchedAsset = getAssetFromLookupText(
+                                nextValue,
+                                assetOptions,
+                              );
+
+                              setAssetLookupText(nextValue);
+                              setSelectedAssetId(matchedAsset?.asset_id ?? "");
+                            }}
+                            disabled={
+                              !selectedArea ||
+                              isLoadingAssets ||
+                              assetOptions.length === 0
+                            }
+                            placeholder={assetDropdownPlaceholder}
+                            className="mt-2 h-9 w-full rounded-lg border border-blue-100 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-blue-50 disabled:text-blue-300"
+                          />
+
+                          <datalist id="admin-asset-options">
+                            {assetOptions.map((asset) => (
+                              <option
+                                key={asset.asset_id}
+                                value={getAssetOptionLabel(asset)}
+                              />
+                            ))}
+                          </datalist>
+                        </>
+                      )}
+
+                      {selectedArea && assetLookupError && (
+                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-red-600">
+                          {assetLookupError}
+                        </p>
+                      )}
+
+                      {selectedArea &&
+                        !assetLookupError &&
+                        !isLoadingAssets && (
+                          <p className="mt-2 text-[10px] leading-snug text-blue-700">
+                            {assetOptions.length > 0
+                              ? `Type a name or choose one of the loaded assets. ${getAssetTypeFilterHint(assetOptions)}`
+                              : "No matching infrastructure assets were found for this area."}
+                          </p>
+                        )}
+
+                      {!hasNoLoadedAssets && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className="text-[10px] font-bold text-blue-700">
+                            Buffer
+                          </label>
+
+                          <input
+                            type="number"
+                            min="1"
+                            max="20"
+                            step="1"
+                            value={assetBufferKm}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value);
+
+                              if (Number.isFinite(nextValue)) {
+                                setAssetBufferKm(
+                                  Math.max(1, Math.min(20, nextValue)),
+                                );
+                              }
+                            }}
+                            className="h-7 w-14 rounded-lg border border-blue-100 bg-white px-2 text-[11px] font-bold text-blue-700 outline-none focus:border-blue-400"
+                          />
+
+                          <span className="text-[10px] font-semibold text-blue-700">
+                            km
+                          </span>
+
+                          <button
+                            onClick={handleRunAssetHeatRisk}
+                            disabled={!canRunAssetLookup}
+                            className="ml-auto rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-200"
+                          >
+                            Analyze asset
+                          </button>
+                        </div>
+                      )}
+
+                      {!selectedArea && (
+                        <p className="mt-2 text-[10px] leading-snug text-blue-700">
+                          Select an admin area first; the asset lookup will load
+                          hospitals, schools, ports, substations, and emergency
+                          facilities from that area.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                      <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                        Heat view
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-100 p-1">
+                        <button
+                          onClick={() => setHeatDisplayMode("combined")}
+                          className={`rounded-lg px-2 py-1.5 text-[10px] font-bold transition ${
+                            heatDisplayMode === "combined"
+                              ? "bg-white text-neutral-950 shadow-sm"
+                              : "text-neutral-500 hover:text-neutral-900"
+                          }`}
+                        >
+                          Both
+                        </button>
+
+                        <button
+                          onClick={() => setHeatDisplayMode("risk")}
+                          className={`rounded-lg px-2 py-1.5 text-[10px] font-bold transition ${
+                            heatDisplayMode === "risk"
+                              ? "bg-white text-orange-700 shadow-sm"
+                              : "text-neutral-500 hover:text-neutral-900"
+                          }`}
+                        >
+                          Risk
+                        </button>
+
+                        <button
+                          onClick={() => setHeatDisplayMode("uncertainty")}
+                          className={`rounded-lg px-2 py-1.5 text-[10px] font-bold transition ${
+                            heatDisplayMode === "uncertainty"
+                              ? "bg-white text-blue-700 shadow-sm"
+                              : "text-neutral-500 hover:text-neutral-900"
+                          }`}
+                        >
+                          Spread
+                        </button>
+                      </div>
+
+                      <p className="mt-2 text-[10px] leading-snug text-neutral-500">
+                        Both overlays risk fill and spread outline. Use Risk or
+                        Spread to isolate one signal.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-orange-50 p-2">
+                        <div className="mb-1 text-[10px] font-bold text-orange-700">
+                          Risk
+                        </div>
+
+                        <div
+                          className="h-2 w-full rounded-full"
+                          style={{
+                            background:
+                              "linear-gradient(to right, #fff7ed, #ffedd5, #fdba74, #fb923c, #ea580c, #7c2d12)",
+                          }}
+                        />
+
+                        <div className="mt-1 flex justify-between text-[9px] font-semibold text-orange-700">
+                          <span>0%</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-sky-50 p-2">
+                        <div className="mb-1 text-[10px] font-bold text-blue-700">
+                          Spread
+                        </div>
+
+                        <div
+                          className="h-2 w-full rounded-full"
+                          style={{
+                            background:
+                              "linear-gradient(to right, #f0f9ff, #bae6fd, #60a5fa, #7c3aed, #312e81)",
+                          }}
+                        />
+
+                        <div className="mt-1 flex justify-between text-[9px] font-semibold text-blue-700">
+                          <span>Low</span>
+                          <span>High</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+                        Optional overlays
+                      </div>
+
+                      <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-purple-50 px-3 py-2">
+                        <span className="text-[10px] font-bold text-purple-700">
+                          Expected exposed population
+                        </span>
+
+                        <input
+                          type="checkbox"
+                          checked={showPopulationOverlay}
+                          onChange={(event) =>
+                            setShowPopulationOverlay(event.target.checked)
+                          }
+                          className="h-4 w-4 cursor-pointer accent-purple-600"
+                        />
+                      </label>
+
+                      <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-sky-50 px-3 py-2">
+                        <span className="text-[10px] font-bold text-sky-700">
+                          Infrastructure assets
+                        </span>
+
+                        <input
+                          type="checkbox"
+                          checked={showInfrastructureAssets}
+                          onChange={(event) =>
+                            setShowInfrastructureAssets(event.target.checked)
+                          }
+                          className="h-4 w-4 cursor-pointer accent-sky-600"
+                        />
+                      </label>
+                    </div>
                   </div>
                 )}
               </div>

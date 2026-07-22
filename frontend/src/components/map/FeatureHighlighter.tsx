@@ -1,11 +1,14 @@
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 
+type HeatDisplayMode = "combined" | "risk" | "uncertainty";
+
 interface FeatureHighlighterProps {
   mapboxMap: mapboxgl.Map | null;
   highlightedFeatures: GeoJSON.Feature[] | null;
   showPopulationOverlay?: boolean;
   showInfrastructureAssets?: boolean;
+  heatDisplayMode?: HeatDisplayMode;
 }
 
 const DEFAULT_LAYER_DISPLAY_NAMES: Record<string, string> = {
@@ -18,8 +21,10 @@ const DEFAULT_LAYER_DISPLAY_NAMES: Record<string, string> = {
 
 const highlightSourceId = "highlight-source";
 
-const manualHeatFillLayerId = "manual-heat-risk-fill";
-const manualHeatOutlineLayerId = "manual-heat-risk-outline";
+const manualHeatRiskFillLayerId = "manual-heat-risk-fill";
+const manualHeatRiskOutlineLayerId = "manual-heat-risk-outline";
+const manualHeatUncertaintyFillLayerId = "manual-heat-uncertainty-fill";
+const manualHeatUncertaintyOutlineLayerId = "manual-heat-uncertainty-outline";
 
 const populationOverlayCircleLayerId = "population-exposure-overlay-circles";
 
@@ -34,8 +39,10 @@ const genericPolygonLayerId = "generic-highlight-polygons";
 const allHighlightLayerIds = [
   tasFillLayerId,
   wetBulbFillLayerId,
-  manualHeatFillLayerId,
-  manualHeatOutlineLayerId,
+  manualHeatRiskFillLayerId,
+  manualHeatRiskOutlineLayerId,
+  manualHeatUncertaintyFillLayerId,
+  manualHeatUncertaintyOutlineLayerId,
   populationOverlayCircleLayerId,
   assetPointLayerId,
   genericPointLayerId,
@@ -72,26 +79,42 @@ function getNumberProp(
   return Number.isFinite(value) ? value : null;
 }
 
+function getForecastSpread(properties: Record<string, unknown>): number | null {
+  return (
+    getNumberProp(properties, "forecast_spread") ??
+    getNumberProp(properties, "heat_uncertainty_delta")
+  );
+}
+
+function getNormalizedForecastSpread(
+  properties: Record<string, unknown>
+): number {
+  return (
+    getNumberProp(properties, "normalized_forecast_spread") ??
+    getNumberProp(properties, "normalized_uncertainty") ??
+    0
+  );
+}
+
 function getPopulationPlanningClassLabel(
   properties: Record<string, unknown>
 ): string {
   const exposureProbability =
     getNumberProp(properties, "exposure_probability") ?? 0;
-  const normalizedForecastSpread =
-    getNumberProp(properties, "normalized_uncertainty") ?? 0;
+  const normalizedForecastSpread = getNormalizedForecastSpread(properties);
   const expectedExposedPopulation =
     getNumberProp(properties, "expected_exposed_population") ?? 0;
 
   if (exposureProbability >= 0.75 && normalizedForecastSpread >= 0.6) {
-    return "Urgent data-gap zone";
+    return "Urgent high-spread exposure zone";
   }
 
   if (exposureProbability >= 0.5 && normalizedForecastSpread >= 0.6) {
-    return "Data-gap priority";
+    return "High-spread exposure priority";
   }
 
   if (expectedExposedPopulation >= 5000 && exposureProbability >= 0.35) {
-    return "Population priority zone";
+    return "Population exposure priority";
   }
 
   if (exposureProbability >= 0.35 && normalizedForecastSpread >= 0.6) {
@@ -107,10 +130,12 @@ function getPopulationPlanningClassLabel(
 
 function getTooltipHtml(properties: Record<string, unknown>): string {
   const layerName = String(properties.layer_name || "");
+  const forecastSpread = getForecastSpread(properties);
+  const normalizedForecastSpread = getNormalizedForecastSpread(properties);
 
   if (layerName === "Population Exposure Overlay") {
     return `
-      <div class="min-w-[240px] font-sans">
+      <div class="min-w-[250px] font-sans">
         <div class="mb-1 text-xs font-bold text-neutral-900">
           Expected exposed population
         </div>
@@ -128,9 +153,12 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           )}</div>
           <div><strong>Method:</strong> population × probability</div>
           <div><strong>Forecast spread:</strong> ${formatNumber(
-            properties.heat_uncertainty_delta
+            forecastSpread
           )}°C</div>
-          <div><strong>Priority score class:</strong> ${cleanLabel(
+          <div><strong>Normalized spread:</strong> ${formatPercent(
+            normalizedForecastSpread
+          )}</div>
+          <div><strong>Priority class:</strong> ${cleanLabel(
             properties.priority_category
           )}</div>
           <div><strong>Planning class:</strong> ${getPopulationPlanningClassLabel(
@@ -146,9 +174,9 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
 
   if (layerName === "Manual Heat Risk") {
     return `
-      <div class="min-w-[190px] font-sans">
+      <div class="min-w-[245px] font-sans">
         <div class="mb-1 text-xs font-bold text-neutral-900">
-          Heat exposure cell
+          Heat exposure H3 hexagon
         </div>
         <div class="space-y-0.5 text-[11px] text-neutral-700">
           <div><strong>Exposure probability:</strong> ${formatPercent(
@@ -160,10 +188,21 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>P10 / P90:</strong> ${formatNumber(
             properties.heat_p10
           )}°C / ${formatNumber(properties.heat_p90)}°C</div>
-          <<div><strong>Forecast spread:</strong> ${formatNumber(
-            properties.heat_uncertainty_delta
+          <div><strong>Forecast spread:</strong> ${formatNumber(
+            forecastSpread
           )}°C</div>
-          <div><strong>Spread method:</strong> P90 - P10 heat estimate</div>
+          <div><strong>Normalized spread:</strong> ${formatPercent(
+            normalizedForecastSpread
+          )}</div>
+          <div><strong>Spatial unit:</strong> ${cleanLabel(
+            properties.spatial_unit || "h3_hexagon"
+          )}</div>
+          <div><strong>H3 resolution:</strong> ${String(
+            properties.h3_resolution || "N/A"
+          )}</div>
+        </div>
+        <div class="mt-1 border-t border-neutral-100 pt-1 text-[10px] leading-snug text-neutral-500">
+          Orange = exposure probability. Blue-purple = forecast spread.
         </div>
       </div>
     `;
@@ -175,7 +214,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
       properties.exposed_to_hazard === "true";
 
     return `
-      <div class="min-w-[190px] font-sans">
+      <div class="min-w-[210px] font-sans">
         <div class="mb-1 text-xs font-bold text-neutral-900">
           ${String(properties.asset_name || "Infrastructure asset")}
         </div>
@@ -190,6 +229,9 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>Exposure probability:</strong> ${formatPercent(
             properties.exposure_probability
           )}</div>
+          <div><strong>Forecast spread:</strong> ${formatNumber(
+            forecastSpread
+          )}°C</div>
           <div><strong>Rank:</strong> ${String(
             properties.asset_rank || "N/A"
           )}</div>
@@ -223,6 +265,7 @@ const FeatureHighlighter = ({
   highlightedFeatures,
   showPopulationOverlay = false,
   showInfrastructureAssets = false,
+  heatDisplayMode = "combined",
 }: FeatureHighlighterProps) => {
   const popupRef = useRef<mapboxgl.Popup | null>(null);
 
@@ -363,6 +406,12 @@ const FeatureHighlighter = ({
 
     const cleanupHoverHandlers: Array<() => void> = [];
 
+    const showRiskLayer =
+      heatDisplayMode === "risk" || heatDisplayMode === "combined";
+    const showUncertaintyFillLayer = heatDisplayMode === "uncertainty";
+    const showUncertaintyOutlineLayer =
+      heatDisplayMode === "uncertainty" || heatDisplayMode === "combined";
+
     addLayerIfMissing({
       id: tasFillLayerId,
       type: "fill",
@@ -416,9 +465,12 @@ const FeatureHighlighter = ({
     });
 
     addLayerIfMissing({
-      id: manualHeatFillLayerId,
+      id: manualHeatRiskFillLayerId,
       type: "fill",
       source: highlightSourceId,
+      layout: {
+        visibility: showRiskLayer ? "visible" : "none",
+      },
       filter: [
         "all",
         ["==", ["geometry-type"], "Polygon"],
@@ -447,29 +499,83 @@ const FeatureHighlighter = ({
           1,
           "#7c2d12",
         ],
-        "fill-opacity": [
-          "interpolate",
-          ["linear"],
-          [
-            "coalesce",
-            ["get", "exposure_probability"],
-            ["get", "risk_score"],
-            0,
-          ],
-          0,
-          0.22,
-          0.5,
-          0.34,
-          1,
-          0.48,
-        ],
+        "fill-opacity": heatDisplayMode === "combined" ? 0.58 : 0.72,
       },
     });
 
     addLayerIfMissing({
-      id: manualHeatOutlineLayerId,
+      id: manualHeatRiskOutlineLayerId,
       type: "line",
       source: highlightSourceId,
+      layout: {
+        visibility: showRiskLayer ? "visible" : "none",
+      },
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "Polygon"],
+        ["==", ["get", "layer_name"], "Manual Heat Risk"],
+      ],
+      paint: {
+        "line-color": "rgba(255,255,255,0.78)",
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5,
+          0.25,
+          8,
+          0.55,
+          11,
+          0.9,
+        ],
+        "line-opacity": 0.7,
+      },
+    });
+
+    addLayerIfMissing({
+      id: manualHeatUncertaintyFillLayerId,
+      type: "fill",
+      source: highlightSourceId,
+      layout: {
+        visibility: showUncertaintyFillLayer ? "visible" : "none",
+      },
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "Polygon"],
+        ["==", ["get", "layer_name"], "Manual Heat Risk"],
+      ],
+      paint: {
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          [
+            "coalesce",
+            ["get", "normalized_forecast_spread"],
+            ["get", "normalized_uncertainty"],
+            0,
+          ],
+          0,
+          "#f0f9ff",
+          0.25,
+          "#bae6fd",
+          0.5,
+          "#60a5fa",
+          0.75,
+          "#7c3aed",
+          1,
+          "#312e81",
+        ],
+        "fill-opacity": 0.72,
+      },
+    });
+
+    addLayerIfMissing({
+      id: manualHeatUncertaintyOutlineLayerId,
+      type: "line",
+      source: highlightSourceId,
+      layout: {
+        visibility: showUncertaintyOutlineLayer ? "visible" : "none",
+      },
       filter: [
         "all",
         ["==", ["geometry-type"], "Polygon"],
@@ -479,36 +585,40 @@ const FeatureHighlighter = ({
         "line-color": [
           "interpolate",
           ["linear"],
-          ["coalesce", ["get", "heat_uncertainty_delta"], 0],
+          [
+            "coalesce",
+            ["get", "normalized_forecast_spread"],
+            ["get", "normalized_uncertainty"],
+            0,
+          ],
           0,
-          "rgba(255,255,255,0.2)",
-          3,
-          "rgba(120,113,108,0.45)",
-          6,
-          "rgba(41,37,36,0.75)",
+          "rgba(186,230,253,0.25)",
+          0.25,
+          "rgba(96,165,250,0.55)",
+          0.5,
+          "rgba(37,99,235,0.8)",
+          0.75,
+          "rgba(124,58,237,0.95)",
+          1,
+          "rgba(49,46,129,1)",
         ],
         "line-width": [
           "interpolate",
           ["linear"],
-          ["coalesce", ["get", "heat_uncertainty_delta"], 0],
+          [
+            "coalesce",
+            ["get", "normalized_forecast_spread"],
+            ["get", "normalized_uncertainty"],
+            0,
+          ],
           0,
-          0.05,
-          3,
-          0.35,
-          6,
-          1.1,
+          heatDisplayMode === "uncertainty" ? 0.4 : 0.2,
+          0.5,
+          heatDisplayMode === "uncertainty" ? 1.1 : 1.4,
+          1,
+          heatDisplayMode === "uncertainty" ? 1.8 : 2.4,
         ],
-        "line-opacity": [
-          "interpolate",
-          ["linear"],
-          ["coalesce", ["get", "heat_uncertainty_delta"], 0],
-          0,
-          0.08,
-          3,
-          0.25,
-          6,
-          0.55,
-        ],
+        "line-opacity": heatDisplayMode === "uncertainty" ? 0.8 : 0.95,
       },
     });
 
@@ -574,13 +684,31 @@ const FeatureHighlighter = ({
           [
             "all",
             [">=", ["coalesce", ["get", "exposure_probability"], 0], 0.75],
-            [">=", ["coalesce", ["get", "normalized_uncertainty"], 0], 0.6],
+            [
+              ">=",
+              [
+                "coalesce",
+                ["get", "normalized_forecast_spread"],
+                ["get", "normalized_uncertainty"],
+                0,
+              ],
+              0.6,
+            ],
           ],
           "#ef4444",
           [
             "all",
             [">=", ["coalesce", ["get", "exposure_probability"], 0], 0.5],
-            [">=", ["coalesce", ["get", "normalized_uncertainty"], 0], 0.6],
+            [
+              ">=",
+              [
+                "coalesce",
+                ["get", "normalized_forecast_spread"],
+                ["get", "normalized_uncertainty"],
+                0,
+              ],
+              0.6,
+            ],
           ],
           "#f97316",
           [
@@ -600,13 +728,31 @@ const FeatureHighlighter = ({
           [
             "all",
             [">=", ["coalesce", ["get", "exposure_probability"], 0], 0.75],
-            [">=", ["coalesce", ["get", "normalized_uncertainty"], 0], 0.6],
+            [
+              ">=",
+              [
+                "coalesce",
+                ["get", "normalized_forecast_spread"],
+                ["get", "normalized_uncertainty"],
+                0,
+              ],
+              0.6,
+            ],
           ],
           2,
           [
             "all",
             [">=", ["coalesce", ["get", "exposure_probability"], 0], 0.5],
-            [">=", ["coalesce", ["get", "normalized_uncertainty"], 0], 0.6],
+            [
+              ">=",
+              [
+                "coalesce",
+                ["get", "normalized_forecast_spread"],
+                ["get", "normalized_uncertainty"],
+                0,
+              ],
+              0.6,
+            ],
           ],
           1.5,
           [
@@ -734,7 +880,8 @@ const FeatureHighlighter = ({
     [
       tasFillLayerId,
       wetBulbFillLayerId,
-      manualHeatFillLayerId,
+      manualHeatRiskFillLayerId,
+      manualHeatUncertaintyFillLayerId,
       populationOverlayCircleLayerId,
       assetPointLayerId,
       genericPointLayerId,
@@ -753,6 +900,7 @@ const FeatureHighlighter = ({
     highlightedFeatures,
     showPopulationOverlay,
     showInfrastructureAssets,
+    heatDisplayMode,
   ]);
 
   return null;
