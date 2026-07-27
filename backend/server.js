@@ -44,6 +44,10 @@ const wbPath = path.resolve(
   "../frontend/public/pacific_islands_wet_bulb.geojson"
 );
 
+// Legacy static TAS/WBT layers - loaded at startup
+let tasFeatures = [];
+let wbFeatures = [];
+
 const ADMIN_BOUNDARY_PATHS = {
   adm1: path.resolve(__dirname, "../data/reference/fiji_admin_adm1.geojson"),
   adm2: path.resolve(__dirname, "../data/reference/fiji_admin_adm2.geojson"),
@@ -94,32 +98,37 @@ const KNOWN_PICT_COUNTRIES = [
   { country_id: "wsm", country_iso3: "WSM", country_name: "Samoa" },
 ];
 
-console.log("Loading backend data on startup...");
+// Startup function - only runs when server.js is executed directly
+function startServer() {
+  console.log("Loading backend data on startup...");
 
-// Legacy static TAS/WBT layers are optional. The current MVP defaults to the
-// live H3 + Open-Meteo heat workflow, so missing legacy GeoJSON files should
-// not produce noisy startup warnings.
-let tasFeatures = [];
-let wbFeatures = [];
-
-try {
-  if (fs.existsSync(tasPath)) {
-    const tasData = JSON.parse(fs.readFileSync(tasPath, "utf8"));
-    tasFeatures = tasData.features || [];
-    console.log(`Loaded optional legacy TAS layer: ${tasFeatures.length} features.`);
+  // Legacy static TAS/WBT layers are optional. The current MVP defaults to the
+  // live H3 + Open-Meteo heat workflow, so missing legacy GeoJSON files should
+  // not produce noisy startup warnings.
+  try {
+    if (fs.existsSync(tasPath)) {
+      const tasData = JSON.parse(fs.readFileSync(tasPath, "utf8"));
+      tasFeatures = tasData.features || [];
+      console.log(`Loaded optional legacy TAS layer: ${tasFeatures.length} features.`);
+    }
+  } catch (err) {
+    console.warn("Optional legacy TAS layer could not be loaded:", err);
   }
-} catch (err) {
-  console.warn("Optional legacy TAS layer could not be loaded:", err);
-}
 
-try {
-  if (fs.existsSync(wbPath)) {
-    const wbData = JSON.parse(fs.readFileSync(wbPath, "utf8"));
-    wbFeatures = wbData.features || [];
-    console.log(`Loaded optional legacy Wet-Bulb layer: ${wbFeatures.length} features.`);
+  try {
+    if (fs.existsSync(wbPath)) {
+      const wbData = JSON.parse(fs.readFileSync(wbPath, "utf8"));
+      wbFeatures = wbData.features || [];
+      console.log(`Loaded optional legacy Wet-Bulb layer: ${wbFeatures.length} features.`);
+    }
+  } catch (err) {
+    console.warn("Optional legacy Wet-Bulb layer could not be loaded:", err);
   }
-} catch (err) {
-  console.warn("Optional legacy Wet-Bulb layer could not be loaded:", err);
+
+  app.listen(PORT, () => {
+    console.log(`Spatial API server running at http://localhost:${PORT}`);
+    void warmAdminAssetCacheOnStartup();
+  });
 }
 
 const MANUAL_HEAT_RISK_LAYER = "Manual Heat Risk";
@@ -4776,7 +4785,10 @@ app.get("/api/chatbot-context", async (req, res) => {
   res.json(context);
 });
 
-app.listen(PORT, () => {
-  console.log(`Spatial API server running at http://localhost:${PORT}`);
-  void warmAdminAssetCacheOnStartup();
-});
+// Only start the server when this file is run directly (not when imported)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startServer();
+}
+
+// Export parseSdmxObservations for testing
+export { parseSdmxObservations };

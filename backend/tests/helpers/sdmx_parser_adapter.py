@@ -52,7 +52,7 @@ def parse_sdmx_observations(sdmx_data: dict, layer_name: str) -> list[dict]:
     input_json_escaped = json.dumps(input_json)
 
     script = f"""
-    import {{ parseSdmxObservations }} from "./services/sdmxPipeline.js";
+    import {{ parseSdmxObservations }} from "./server.js";
 
     const input = JSON.parse({input_json_escaped});
     const result = parseSdmxObservations(input.sdmxData, input.layerName);
