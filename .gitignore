@@ -76,3 +76,14 @@ venv/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+# -----------------------------
+# Spec sync tooling (lives outside this repo)
+# -----------------------------
+sync-specs.sh
+
+# -----------------------------
+# Data cache (generated, not source)
+# -----------------------------
+data/cache/
+
+# -----------------------------
