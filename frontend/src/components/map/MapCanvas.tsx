@@ -113,7 +113,7 @@ interface AdminBoundaryConfig {
   apiPath: string;
 }
 
-type MapLayer = "tas" | "wet_bulb" | "manual_heat_risk" | null;
+type MapLayer = "tas" | "wet_bulb" | "manual_heat_risk" | "sea_level" | "power_gen" | "water_access" | null;
 type HeatDisplayMode = "combined" | "risk" | "uncertainty";
 
 type BoundaryLoadStatus =
@@ -906,7 +906,20 @@ const MapCanvas = ({
 
   const manualHeatThresholdRef = useRef(initialAnalysisSettings.heatThreshold);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const hoverPopupRef = useRef<mapboxgl.Popup | null>(null);
   const didInitializeHeatLayerRef = useRef(false);
+
+  // Helper to toggle a dynamic layer on/off
+  const toggleLayer = useCallback((layer: MapLayer, isGlobal: boolean) => {
+    if (activeLayer !== layer) {
+      setActiveLayer(layer);
+      setShowGlobalDataset(isGlobal);
+    } else if (showGlobalDataset === isGlobal) {
+      setActiveLayer(null);
+    } else {
+      setShowGlobalDataset(isGlobal);
+    }
+  }, [activeLayer, setActiveLayer, setShowGlobalDataset, showGlobalDataset]);
 
   const selectedCountry =
     regions.find((country) => country.country_id === selectedCountryId) ?? null;
@@ -1635,6 +1648,96 @@ const MapCanvas = ({
     }
   }, [mapboxMap, selectedArea]);
 
+  // Hover tooltip for dynamic layers (sea-level-h3, power-gen-fill, water-access-fill)
+  useEffect(() => {
+    if (!mapboxMap) return;
+
+    const dynamicLayers = [
+      "sea-level-h3-layer",
+      "power-gen-fill-layer",
+      "water-access-fill-layer",
+    ];
+
+    const handleMouseMove = (e: mapboxgl.MapMouseEvent) => {
+      for (const layerId of dynamicLayers) {
+        if (!mapboxMap.getLayer(layerId)) continue;
+
+        const features = mapboxMap.queryRenderedFeatures(e.point, {
+          layers: [layerId],
+        });
+
+        if (features.length > 0) {
+          const feature = features[0];
+          const props = feature.properties || {};
+          const indicatorValue = props.indicator_value;
+          let tooltipContent = `<strong>${props.name || props.geo_pict || "Unknown"}</strong>`;
+
+          if (indicatorValue !== undefined && indicatorValue !== null) {
+            let unit = "";
+            if (layerId === "sea-level-h3-layer") unit = " m";
+            else if (layerId === "water-access-fill-layer") unit = "%";
+            else if (layerId === "power-gen-fill-layer") unit = " GWh";
+            tooltipContent += `<br/>Value: ${Number(indicatorValue).toFixed(3)}${unit}`;
+          }
+          tooltipContent += `<br/><span style="font-size:10px;color:#888;">${props.layer_name || layerId}</span>`;
+
+          mapboxMap.getCanvas().style.cursor = "pointer";
+
+          if (hoverPopupRef.current) {
+            hoverPopupRef.current.remove();
+          }
+          hoverPopupRef.current = new mapboxgl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 10,
+            maxWidth: "220px",
+          })
+            .setLngLat(e.lngLat)
+            .setHTML(`<div style="font-family:sans-serif;font-size:12px;padding:4px 6px;line-height:1.4;">${tooltipContent}</div>`)
+            .addTo(mapboxMap);
+          return;
+        }
+      }
+
+      // No dynamic layer feature found — remove hover popup
+      if (hoverPopupRef.current) {
+        hoverPopupRef.current.remove();
+        hoverPopupRef.current = null;
+      }
+    };
+
+    mapboxMap.on("mousemove", handleMouseMove);
+    return () => {
+      mapboxMap.off("mousemove", handleMouseMove);
+      if (hoverPopupRef.current) {
+        hoverPopupRef.current.remove();
+        hoverPopupRef.current = null;
+      }
+    };
+  }, [mapboxMap]);
+
+  // workflow-complete flyTo listener (forward-compat with visual-workflow-programmer)
+  useEffect(() => {
+    if (!mapboxMap) return;
+
+    const handleWorkflowComplete = (e: CustomEvent) => {
+      const { center, zoom } = e.detail;
+      if (center) {
+        mapboxMap.flyTo({
+          center: center as [number, number],
+          zoom: zoom || 8,
+          essential: true,
+          duration: 2500,
+        });
+      }
+    };
+
+    window.addEventListener("workflow-complete" as any, handleWorkflowComplete);
+    return () => {
+      window.removeEventListener("workflow-complete" as any, handleWorkflowComplete);
+    };
+  }, [mapboxMap]);
+
   const handleRerunHeatExposure = () => {
     if (!activeAnalysisGeometry) return;
 
@@ -2359,6 +2462,110 @@ const MapCanvas = ({
                           className="h-4 w-4 cursor-pointer accent-sky-600"
                         />
                       </label>
+                    </div>
+
+                    {/* Dynamic Datasets section */}
+                    <div className="mt-3 border-t border-neutral-100 pt-3">
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                        Dynamic Datasets
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => toggleLayer("sea_level", false)}
+                          className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                            activeLayer === "sea_level" && !showGlobalDataset
+                              ? "bg-white shadow-sm text-neutral-950 font-bold"
+                              : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                          }`}
+                        >
+                          Sea Level Rise (H3)
+                        </button>
+                        <button
+                          onClick={() => toggleLayer("power_gen", false)}
+                          className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                            activeLayer === "power_gen" && !showGlobalDataset
+                              ? "bg-white shadow-sm text-neutral-950 font-bold"
+                              : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                          }`}
+                        >
+                          Power Gen (GWh)
+                        </button>
+                        <button
+                          onClick={() => toggleLayer("water_access", false)}
+                          className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                            activeLayer === "water_access" && !showGlobalDataset
+                              ? "bg-white shadow-sm text-neutral-950 font-bold"
+                              : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                          }`}
+                        >
+                          Water Access
+                        </button>
+                      </div>
+
+                      {/* Legend blocks for active dynamic layers */}
+                      {activeLayer === "sea_level" && (
+                        <div className="mt-3 border-t border-neutral-100 pt-3">
+                          <div className="mb-2 text-xs font-bold text-neutral-800">
+                            Sea Level Anomaly
+                          </div>
+                          <div className="mb-1 text-[10px] text-neutral-400">
+                            Meters (m)
+                          </div>
+                          <div
+                            className="h-2 w-full rounded-full"
+                            style={{
+                              background: "linear-gradient(to right, #f0f9ff, #38bdf8, #075985)",
+                            }}
+                          />
+                          <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                            <span>Low</span>
+                            <span>Moderate</span>
+                            <span>High</span>
+                          </div>
+                        </div>
+                      )}
+                      {activeLayer === "power_gen" && (
+                        <div className="mt-3 border-t border-neutral-100 pt-3">
+                          <div className="mb-2 text-xs font-bold text-neutral-800">
+                            Power Generation (GWh)
+                          </div>
+                          <div className="mb-1 text-[10px] text-neutral-400">
+                            Gigawatt-hours (GWh)
+                          </div>
+                          <div
+                            className="h-2 w-full rounded-full"
+                            style={{
+                              background: "linear-gradient(to right, #fff7ed, #fb923c, #7c2d12)",
+                            }}
+                          />
+                          <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                            <span>Low</span>
+                            <span>Medium</span>
+                            <span>High (GWh)</span>
+                          </div>
+                        </div>
+                      )}
+                      {activeLayer === "water_access" && (
+                        <div className="mt-3 border-t border-neutral-100 pt-3">
+                          <div className="mb-2 text-xs font-bold text-neutral-800">
+                            Safe Water Access
+                          </div>
+                          <div className="mb-1 text-[10px] text-neutral-400">
+                            Percentage (%)
+                          </div>
+                          <div
+                            className="h-2 w-full rounded-full"
+                            style={{
+                              background: "linear-gradient(to right, #fee2e2, #fbbf24, #22c55e)",
+                            }}
+                          />
+                          <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                            <span>0%</span>
+                            <span>50%</span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
