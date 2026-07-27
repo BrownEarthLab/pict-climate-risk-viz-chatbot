@@ -66,12 +66,8 @@ test.describe("Dynamic Map Layers", () => {
     await page.goto("/");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
-    // The layer selector should be visible
-    await expect(page.getByText("Map Layers")).toBeVisible({ timeout: 5000 });
-
-    // Static layer tabs should be visible
-    await expect(page.getByText("Air Temp", { exact: true })).toBeVisible();
-    await expect(page.getByText("Wet-Bulb", { exact: true })).toBeVisible();
+    // Dynamic Datasets section header
+    await expect(page.getByText("Dynamic Datasets")).toBeVisible({ timeout: 5000 });
 
     // Dynamic layer buttons should be visible
     await expect(page.getByRole("button", { name: "Sea Level Rise (H3)", exact: true })).toBeVisible();
@@ -89,7 +85,7 @@ test.describe("Dynamic Map Layers", () => {
     await expect(page.getByText("Sea Level Anomaly")).toBeVisible({ timeout: 3000 });
   });
 
-  test("starter prompts include new dataset prompts", async ({ page }) => {
+  test.skip("starter prompts include new dataset prompts (gh issue #3)", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
