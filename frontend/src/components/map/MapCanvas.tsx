@@ -856,6 +856,7 @@ const MapCanvas = ({
     mapboxMap,
     activeLayer,
     setActiveLayer,
+    showGlobalDataset,
     setShowGlobalDataset,
   } = useMapbox();
 
