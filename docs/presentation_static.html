@@ -12,7 +12,7 @@
     <!-- KaTeX for True LaTeX Math Equations Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]});"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
 
     <style>
         :root {
@@ -609,9 +609,9 @@
                     <div class="latex-block block-theorem fragment">
                         <div class="block-header">3&times;3 Bivariate Classification</div>
                         <div class="block-content">
-                            Combines projected temperature mean ($	ext{raster\_mean}$) with model uncertainty ($lpha$).
+                            Combines projected temperature mean \(\text{raster\_mean}\) with model uncertainty \(\alpha\).
                             <div style="margin-top: 14px; font-size: 21px; color: #334155;">
-                                <strong>Uncertainty Metric ($lpha$):</strong> Currently uses a mock inverse-temperature placeholder ($1 - 	ext{normalized\_mean}$) built on top of the bivariate choropleth function.
+                                <strong>Uncertainty Metric \(\alpha\):</strong> Currently uses a mock inverse-temperature placeholder (\(1 - \text{normalized\_mean}\)) built on top of the bivariate choropleth function.
                             </div>
                         </div>
                     </div>
@@ -619,7 +619,7 @@
                     <div class="latex-block block-example fragment">
                         <div class="block-header">GPU Trace Rendering Optimization</div>
                         <div class="block-content">
-                            Reduced Mapbox trace overhead from <strong>1,137 separate traces down to 3 static GPU layers</strong> ($	ext{Choroplethmapbox}$), completely resolving browser interaction freezes.
+                            Reduced Mapbox trace overhead from <strong>1,137 separate traces down to 3 static GPU layers</strong> (\(\text{Choroplethmapbox}\)), completely resolving browser interaction freezes.
                         </div>
                     </div>
                 </div>
@@ -658,7 +658,7 @@
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible"><strong>Dataset Definition:</strong> Fiji Climate Change & Health Vulnerability Assessment (CHVA) dataset tracking 111 mapped healthcare infrastructure locations categorized by tier: Hospitals (Red), Health Centres (Orange), and Nursing Stations (Blue).</li>
-                                <li class="fragment visible"><strong>Spatial Join Overlay:</strong> Performed spatial overlay ($	ext{gpd.sjoin}$) mapping GPS facility coordinates directly to administrative subdivision polygons.</li>
+                                <li class="fragment visible"><strong>Spatial Join Overlay:</strong> Performed spatial overlay (\(\text{gpd.sjoin}\)) mapping GPS facility coordinates directly to administrative subdivision polygons.</li>
                             </ul>
                         </div>
                     </div>
@@ -670,7 +670,7 @@
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible">Multi-resolution Uber H3 hexagonal spatial binning (Resolutions 5, 6, 7).</li>
-                                <li class="fragment visible">Built geometric caching layer ($	ext{data/cache/}$), cutting pipeline build time from <strong>~30s down to &lt;2s</strong>.</li>
+                                <li class="fragment visible">Built geometric caching layer (\(\text{data/cache/}\)), cutting pipeline build time from <strong>~30s down to &lt;2s</strong>.</li>
                                 <li class="fragment visible">Truncated GeoJSON coordinates to 6 decimal places (~10 cm precision) for fast network transmission.</li>
                             </ul>
                         </div>
@@ -709,7 +709,7 @@
                     <div class="latex-block block-definition fragment">
                         <div class="block-header">Minimalist Environmental Aesthetic</div>
                         <div class="block-content">
-                            Built with a clean, warm minimalist design system using soft sand tones ($\#	ext{f4f1eb}$) tailored for non-expert decision makers reviewing climate risk documents.
+                            Built with a clean, warm minimalist design system using soft sand tones tailored for non-expert decision makers reviewing climate risk documents.
                         </div>
                     </div>
                     <div class="latex-block block-example fragment">
@@ -754,7 +754,7 @@
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible">Mapbox GL JS map canvas featuring thin boundary outlines, tooltips, and dynamic legends.</li>
-                                <li class="fragment visible">Interactive bounding box and polygon drawing controls ($	ext{DrawControls.tsx}$).</li>
+                                <li class="fragment visible">Interactive bounding box and polygon drawing controls (\(\text{DrawControls.tsx}\)).</li>
                                 <li class="fragment visible">Real-time zonal statistics computation over custom drawn polygons with live feedback to the chatbot interface.</li>
                             </ul>
                         </div>
@@ -763,8 +763,8 @@
                         <div class="block-header">Live SDMX Data API & H3 Binner</div>
                         <div class="block-content">
                             <ul class="beamer-list">
-                                <li class="fragment visible"><strong>SDMX Protocol:</strong> Ingests live regional Pacific indicators directly from Pacific Data Hub (PDH) SDMX endpoints using $	ext{sdmxApiClient.js}$.</li>
-                                <li class="fragment visible">$	ext{h3Binner.js}$: Aggregates live climate metrics into H3 spatial cells on the fly.</li>
+                                <li class="fragment visible"><strong>SDMX Protocol:</strong> Ingests live regional Pacific indicators directly from Pacific Data Hub (PDH) SDMX endpoints using \(\text{sdmxApiClient.js}\).</li>
+                                <li class="fragment visible">\(\text{h3Binner.js}\): Aggregates live climate metrics into H3 spatial cells on the fly.</li>
                             </ul>
                         </div>
                     </div>
@@ -869,7 +869,7 @@
                         <div class="block-header">Priority 1: High Impact Data Layers</div>
                         <div class="block-content">
                             <ul class="beamer-list">
-                                <li class="fragment visible"><strong>True CMIP6 Model Variance:</strong> Replace mock $lpha$ with real spatial standard deviation ($	ext{raster\_std}$).</li>
+                                <li class="fragment visible"><strong>True CMIP6 Model Variance:</strong> Replace mock \(\alpha\) with real spatial standard deviation (\(\text{raster\_std}\)).</li>
                                 <li class="fragment visible"><strong>Tropical Cyclone Hazard Layers:</strong> Ingest historical cyclone tracks, wind field vectors, and coastal storm surge inundation maps.</li>
                             </ul>
                         </div>
@@ -883,7 +883,7 @@
                             <ul class="beamer-list">
                                 <li class="fragment visible"><strong>RAG System for Metadata & Schemas:</strong> Vector-index spatial layer metadata, dataset headers, and analytical tool function schemas to improve LLM tool selection accuracy.</li>
                                 <li class="fragment visible"><strong>Brushing & Linking:</strong> Dynamic cross-filtering connecting map selections directly to chart visualizations and tabular facility views.</li>
-                                <li class="fragment visible"><strong>Low-Bandwidth Dashboard:</strong> Load Plotly via CDN to shrink $	ext{fiji\_optimized.html}$ from 18 MB to &lt;500 KB.</li>
+                                <li class="fragment visible"><strong>Low-Bandwidth Dashboard:</strong> Load Plotly via CDN to shrink \(\text{fiji\_optimized.html}\) from 18 MB to &lt;500 KB.</li>
                                 <li class="fragment visible"><strong>React Flow Node Graph:</strong> Render visual execution graph of LLM spatial reasoning.</li>
                             </ul>
                         </div>
