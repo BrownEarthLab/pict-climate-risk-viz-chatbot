@@ -1,18 +1,4 @@
-import base64
-
-def get_b64(path):
-    with open(path, 'rb') as f:
-        mime = 'image/jpeg' if path.endswith('.jpeg') or path.endswith('.jpg') else 'image/png'
-        return f'data:{mime};base64,' + base64.b64encode(f.read()).decode('utf-8')
-
-images = {
-    'fiji_h3': get_b64('docs/images/fiji-h3-hexagons.png'),
-    'fiji_chva': get_b64('docs/images/fiji-chva-facilities.png'),
-    'chat_overview': get_b64('docs/images/chat-sample-overview.jpeg'),
-    'chat_tikina': get_b64('docs/images/chat-tikina.jpeg'),
-}
-
-html_content = '''<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -26,7 +12,7 @@ html_content = '''<!DOCTYPE html>
     <!-- KaTeX for True LaTeX Math Equations Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\\\(', right: '\\\\)', display: false}]});"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]});"></script>
 
     <style>
         :root {
@@ -585,7 +571,7 @@ html_content = '''<!DOCTYPE html>
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible"><strong>Role & Purpose:</strong> The primary main project and end-user decision-support platform designed for non-expert decision makers to interact with climate datasets via natural language.</li>
-                                <li class="fragment visible"><strong>Key Features:</strong> Minimalist conversational UI, 13 Python geospatial analytical tools, interactive <span class="math-inline">MapCanvas</span>, zonal stats drawer, and live SDMX data services.</li>
+                                <li class="fragment visible"><strong>Key Features:</strong> Minimalist conversational UI, 13 Python geospatial analytical tools, interactive MapCanvas, zonal stats drawer, and live SDMX data services.</li>
                             </ul>
                         </div>
                     </div>
@@ -623,12 +609,9 @@ html_content = '''<!DOCTYPE html>
                     <div class="latex-block block-theorem fragment">
                         <div class="block-header">3&times;3 Bivariate Classification</div>
                         <div class="block-content">
-                            Combines projected temperature mean (\(\text{raster\_mean}\)) with model uncertainty (\(\alpha\)).
-                            <div style="margin-top: 12px; font-size: 21px; color: #334155;">
-                                <strong>Uncertainty Metric (\(\alpha\)):</strong> Currently uses a mock inverse-temperature metric (\(1 - \text{normalized\_mean}\)) used as an initial uncertainty placeholder on top of the bivariate choropleth function.
-                            </div>
-                            <div style="margin-top: 10px; font-size: 20px; color: #475569; font-style: italic; border-top: 1px solid #cbd5e1; padding-top: 8px;">
-                                <strong>Spatial Standard Deviation:</strong> Quantifies the spatial variability and spread of climate metrics across grid cells or model outputs within a geographic region.
+                            Combines projected temperature mean ($	ext{raster\_mean}$) with model uncertainty ($lpha$).
+                            <div style="margin-top: 14px; font-size: 21px; color: #334155;">
+                                <strong>Uncertainty Metric ($lpha$):</strong> Currently uses a mock inverse-temperature placeholder ($1 - 	ext{normalized\_mean}$) built on top of the bivariate choropleth function.
                             </div>
                         </div>
                     </div>
@@ -636,7 +619,7 @@ html_content = '''<!DOCTYPE html>
                     <div class="latex-block block-example fragment">
                         <div class="block-header">GPU Trace Rendering Optimization</div>
                         <div class="block-content">
-                            Reduced Mapbox trace overhead from <strong>1,137 separate traces down to 3 static GPU layers</strong> (\(\text{Choroplethmapbox}\)), completely resolving browser interaction freezes.
+                            Reduced Mapbox trace overhead from <strong>1,137 separate traces down to 3 static GPU layers</strong> ($	ext{Choroplethmapbox}$), completely resolving browser interaction freezes.
                         </div>
                     </div>
                 </div>
@@ -675,7 +658,7 @@ html_content = '''<!DOCTYPE html>
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible"><strong>Dataset Definition:</strong> Fiji Climate Change & Health Vulnerability Assessment (CHVA) dataset tracking 111 mapped healthcare infrastructure locations categorized by tier: Hospitals (Red), Health Centres (Orange), and Nursing Stations (Blue).</li>
-                                <li class="fragment visible"><strong>Spatial Join Overlay:</strong> Performed spatial overlay (\(\text{gpd.sjoin}\)) mapping GPS facility coordinates directly to administrative subdivision polygons.</li>
+                                <li class="fragment visible"><strong>Spatial Join Overlay:</strong> Performed spatial overlay ($	ext{gpd.sjoin}$) mapping GPS facility coordinates directly to administrative subdivision polygons.</li>
                             </ul>
                         </div>
                     </div>
@@ -687,7 +670,7 @@ html_content = '''<!DOCTYPE html>
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible">Multi-resolution Uber H3 hexagonal spatial binning (Resolutions 5, 6, 7).</li>
-                                <li class="fragment visible">Built geometric caching layer (\(\text{data/cache/}\)), cutting pipeline build time from <strong>~30s down to &lt;2s</strong>.</li>
+                                <li class="fragment visible">Built geometric caching layer ($	ext{data/cache/}$), cutting pipeline build time from <strong>~30s down to &lt;2s</strong>.</li>
                                 <li class="fragment visible">Truncated GeoJSON coordinates to 6 decimal places (~10 cm precision) for fast network transmission.</li>
                             </ul>
                         </div>
@@ -726,7 +709,7 @@ html_content = '''<!DOCTYPE html>
                     <div class="latex-block block-definition fragment">
                         <div class="block-header">Minimalist Environmental Aesthetic</div>
                         <div class="block-content">
-                            Built with a clean, warm minimalist design system using soft sand tones (\(\#\text{f4f1eb}\)) tailored for non-expert decision makers reviewing climate risk documents.
+                            Built with a clean, warm minimalist design system using soft sand tones ($\#	ext{f4f1eb}$) tailored for non-expert decision makers reviewing climate risk documents.
                         </div>
                     </div>
                     <div class="latex-block block-example fragment">
@@ -771,7 +754,7 @@ html_content = '''<!DOCTYPE html>
                         <div class="block-content">
                             <ul class="beamer-list">
                                 <li class="fragment visible">Mapbox GL JS map canvas featuring thin boundary outlines, tooltips, and dynamic legends.</li>
-                                <li class="fragment visible">Interactive bounding box and polygon drawing controls (\(\text{DrawControls.tsx}\)).</li>
+                                <li class="fragment visible">Interactive bounding box and polygon drawing controls ($	ext{DrawControls.tsx}$).</li>
                                 <li class="fragment visible">Real-time zonal statistics computation over custom drawn polygons with live feedback to the chatbot interface.</li>
                             </ul>
                         </div>
@@ -780,8 +763,8 @@ html_content = '''<!DOCTYPE html>
                         <div class="block-header">Live SDMX Data API & H3 Binner</div>
                         <div class="block-content">
                             <ul class="beamer-list">
-                                <li class="fragment visible"><strong>SDMX Protocol:</strong> Ingests live regional Pacific indicators directly from Pacific Data Hub (PDH) SDMX endpoints using \(\text{sdmxApiClient.js}\).</li>
-                                <li class="fragment visible">\(\text{h3Binner.js}\): Aggregates live climate metrics into H3 spatial cells on the fly.</li>
+                                <li class="fragment visible"><strong>SDMX Protocol:</strong> Ingests live regional Pacific indicators directly from Pacific Data Hub (PDH) SDMX endpoints using $	ext{sdmxApiClient.js}$.</li>
+                                <li class="fragment visible">$	ext{h3Binner.js}$: Aggregates live climate metrics into H3 spatial cells on the fly.</li>
                             </ul>
                         </div>
                     </div>
@@ -793,7 +776,7 @@ html_content = '''<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- SLIDE 8: 13 Analytical Geospatial Python Tools (Full-Width Tool Registry) -->
+        <!-- SLIDE 8: 13 Analytical Geospatial Python Tools -->
         <div class="slide" id="slide-8">
             <div class="beamer-header-bar">
                 <div class="beamer-breadcrumbs">
@@ -886,7 +869,7 @@ html_content = '''<!DOCTYPE html>
                         <div class="block-header">Priority 1: High Impact Data Layers</div>
                         <div class="block-content">
                             <ul class="beamer-list">
-                                <li class="fragment visible"><strong>True CMIP6 Model Variance:</strong> Replace mock \(\alpha\) with real spatial standard deviation (\(\text{raster\_std}\)).</li>
+                                <li class="fragment visible"><strong>True CMIP6 Model Variance:</strong> Replace mock $lpha$ with real spatial standard deviation ($	ext{raster\_std}$).</li>
                                 <li class="fragment visible"><strong>Tropical Cyclone Hazard Layers:</strong> Ingest historical cyclone tracks, wind field vectors, and coastal storm surge inundation maps.</li>
                             </ul>
                         </div>
@@ -900,7 +883,7 @@ html_content = '''<!DOCTYPE html>
                             <ul class="beamer-list">
                                 <li class="fragment visible"><strong>RAG System for Metadata & Schemas:</strong> Vector-index spatial layer metadata, dataset headers, and analytical tool function schemas to improve LLM tool selection accuracy.</li>
                                 <li class="fragment visible"><strong>Brushing & Linking:</strong> Dynamic cross-filtering connecting map selections directly to chart visualizations and tabular facility views.</li>
-                                <li class="fragment visible"><strong>Low-Bandwidth Dashboard:</strong> Load Plotly via CDN to shrink \(\text{fiji\_optimized.html}\) from 18 MB to &lt;500 KB.</li>
+                                <li class="fragment visible"><strong>Low-Bandwidth Dashboard:</strong> Load Plotly via CDN to shrink $	ext{fiji\_optimized.html}$ from 18 MB to &lt;500 KB.</li>
                                 <li class="fragment visible"><strong>React Flow Node Graph:</strong> Render visual execution graph of LLM spatial reasoning.</li>
                             </ul>
                         </div>
@@ -1102,9 +1085,3 @@ html_content = '''<!DOCTYPE html>
     </script>
 </body>
 </html>
-'''
-
-with open('/home/node/.gemini/antigravity-cli/brain/28f6a69b-d5fc-457f-aa75-270682c2f2e0/scratch/update_slides.py', 'w') as f:
-    f.write(html_content)
-
-print('Wrote update script!')
