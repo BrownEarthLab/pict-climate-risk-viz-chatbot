@@ -1,0 +1,60 @@
+{
+  "version": "0.1.0",
+  "description": "Catalog of climate datasets the app knows how to use. Raw files are intentionally not committed to git.",
+  "source_families": {
+    "forecast_open_meteo": {
+      "label": "Open-Meteo forecast",
+      "mode": "live_forecast",
+      "precomputed": false,
+      "time_horizon": "current short-term forecast",
+      "notes": [
+        "Keep this as the existing daily/forecast workflow."
+      ]
+    },
+    "cordex": {
+      "label": "CORDEX / ESGF",
+      "mode": "precomputed_climate_indices",
+      "precomputed": true,
+      "time_horizon": "historical and projections, depending on downloaded NetCDF files",
+      "notes": [
+        "Candidate source for tasmax/Tmax and ClimDEX-style indices.",
+        "Meeting note mentioned CORDEX Tmax, model ICTP.ECMWF-ERAINT, and TX90p."
+      ]
+    },
+    "wet_bulb_netcdf": {
+      "label": "Uploaded wet-bulb NetCDF",
+      "mode": "precomputed_climate_indices",
+      "precomputed": true,
+      "time_horizon": "depends on file metadata",
+      "notes": [
+        "Use as a prototype WBT climate-index source after provenance is confirmed."
+      ]
+    }
+  },
+  "datasets": [
+    {
+      "dataset_id": "open_meteo_forecast_apparent_temperature",
+      "source_family": "forecast_open_meteo",
+      "variable": "apparent_temperature",
+      "label": "Open-Meteo apparent temperature forecast",
+      "raw_path": null,
+      "status": "active_existing_workflow"
+    },
+    {
+      "dataset_id": "uploaded_wet_bulb_temperature",
+      "source_family": "wet_bulb_netcdf",
+      "variable": "wet_bulb_temperature",
+      "label": "Uploaded wet-bulb temperature NetCDF",
+      "raw_path": "data/climate/raw/wet_bulb/wet_bulb_temperature.nc",
+      "status": "prototype_source_pending_processing"
+    },
+    {
+      "dataset_id": "cordex_tasmax_ictp_ecmwf_eraint",
+      "source_family": "cordex",
+      "variable": "tasmax",
+      "label": "CORDEX daily maximum temperature / ICTP.ECMWF-ERAINT",
+      "raw_path": "data/climate/raw/cordex/",
+      "status": "planned"
+    }
+  ]
+}

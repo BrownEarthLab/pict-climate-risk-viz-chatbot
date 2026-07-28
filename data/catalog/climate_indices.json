@@ -1,0 +1,153 @@
+{
+  "version": "0.1.0",
+  "description": "Climate-index definitions for precomputed yearly, 5-year, and decade heat layers.",
+  "time_windows": {
+    "yearly": {
+      "label": "Yearly",
+      "aggregation": "calendar_year",
+      "display_hint": "One value per year."
+    },
+    "five_year": {
+      "label": "5-year",
+      "aggregation": "mean_annual_value_inside_window",
+      "display_hint": "Mean annual value inside a 5-year block."
+    },
+    "decade": {
+      "label": "Decade",
+      "aggregation": "mean_annual_value_inside_window",
+      "display_hint": "Mean annual value inside a decade."
+    }
+  },
+  "metrics": {
+    "days_above_threshold": {
+      "label": "Days above threshold",
+      "description": "Number of days in a year where the selected variable is greater than or equal to the selected threshold.",
+      "requires_threshold": true,
+      "output_unit": "days/year",
+      "compatible_variables": [
+        "tasmax",
+        "wet_bulb_temperature",
+        "apparent_temperature"
+      ],
+      "map_value_field": "days_above_threshold"
+    },
+    "share_days_above_threshold": {
+      "label": "Share of days above threshold",
+      "description": "Fraction of days in a year where the selected variable is greater than or equal to the selected threshold.",
+      "requires_threshold": true,
+      "output_unit": "percent of days",
+      "compatible_variables": [
+        "tasmax",
+        "wet_bulb_temperature",
+        "apparent_temperature"
+      ],
+      "map_value_field": "share_days_above_threshold"
+    },
+    "ever_reaches_threshold": {
+      "label": "Ever reaches threshold",
+      "description": "Whether the selected threshold is reached at least once in the period.",
+      "requires_threshold": true,
+      "output_unit": "boolean / probability",
+      "compatible_variables": [
+        "tasmax",
+        "wet_bulb_temperature",
+        "apparent_temperature"
+      ],
+      "map_value_field": "ever_reaches_threshold"
+    },
+    "years_with_any_exceedance": {
+      "label": "Years with any exceedance",
+      "description": "Number of years in a multi-year window where the selected threshold is reached at least once.",
+      "requires_threshold": true,
+      "output_unit": "years",
+      "compatible_variables": [
+        "tasmax",
+        "wet_bulb_temperature",
+        "apparent_temperature"
+      ],
+      "map_value_field": "years_with_any_exceedance"
+    },
+    "max_consecutive_days_above_threshold": {
+      "label": "Longest hot spell",
+      "description": "Longest consecutive run of days above the selected threshold.",
+      "requires_threshold": true,
+      "output_unit": "consecutive days",
+      "compatible_variables": [
+        "tasmax",
+        "wet_bulb_temperature",
+        "apparent_temperature"
+      ],
+      "map_value_field": "max_consecutive_days_above_threshold"
+    },
+    "hot_spell_count": {
+      "label": "Hot spell count",
+      "description": "Number of hot spells above the selected threshold. A hot spell is a run of at least the configured minimum spell length.",
+      "requires_threshold": true,
+      "output_unit": "spells/year",
+      "compatible_variables": [
+        "tasmax",
+        "wet_bulb_temperature",
+        "apparent_temperature"
+      ],
+      "map_value_field": "hot_spell_count",
+      "parameters": {
+        "minimum_spell_length_days": [
+          3,
+          5,
+          7
+        ],
+        "default_minimum_spell_length_days": 3
+      }
+    },
+    "txx": {
+      "label": "TXx / annual maximum Tmax",
+      "description": "Annual maximum of daily maximum temperature.",
+      "requires_threshold": false,
+      "output_unit": "\u00b0C",
+      "compatible_variables": [
+        "tasmax"
+      ],
+      "map_value_field": "txx"
+    },
+    "tx90p": {
+      "label": "TX90p / warm days",
+      "description": "Percentage of days where daily maximum temperature exceeds a local baseline 90th percentile.",
+      "requires_threshold": false,
+      "output_unit": "percent of days",
+      "compatible_variables": [
+        "tasmax"
+      ],
+      "map_value_field": "tx90p",
+      "requires_baseline_percentile": true,
+      "baseline_percentile": 90
+    },
+    "wsdi": {
+      "label": "WSDI / warm spell duration index",
+      "description": "Count of days that are part of warm spells, using a local percentile threshold and a minimum spell length.",
+      "requires_threshold": false,
+      "output_unit": "days/year",
+      "compatible_variables": [
+        "tasmax"
+      ],
+      "map_value_field": "wsdi",
+      "requires_baseline_percentile": true,
+      "baseline_percentile": 90,
+      "parameters": {
+        "minimum_spell_length_days": [
+          3,
+          5,
+          6,
+          7
+        ],
+        "default_minimum_spell_length_days": 6
+      }
+    }
+  },
+  "mvp_metrics": [
+    "days_above_threshold",
+    "ever_reaches_threshold",
+    "max_consecutive_days_above_threshold",
+    "txx",
+    "tx90p"
+  ]
+}

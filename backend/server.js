@@ -7,6 +7,11 @@ import { fileURLToPath } from "url";
 import { fromArrayBuffer } from "geotiff";
 import * as h3 from "h3-js";
 import { interpretResults } from "./interpretResults.js";
+import {
+  loadClimateCatalog,
+  listClimateVariables,
+  getCompatibleMetrics,
+} from "./climate/climateCatalog.js";
 
 // SDMX dynamic layer pipeline
 import {
@@ -4272,6 +4277,84 @@ async function handleLayerRequest(layerName, res) {
     });
   }
 }
+
+app.get("/api/climate-catalog", (req, res) => {
+  try {
+    const catalog = loadClimateCatalog();
+    const requestedVariable = req.query.variable
+      ? String(req.query.variable)
+      : null;
+
+    const variables = listClimateVariables(catalog);
+    const compatibleMetricsByVariable = Object.fromEntries(
+      variables.map((variable) => [
+        variable.variable_id,
+        getCompatibleMetrics(variable.variable_id, catalog),
+      ]),
+    );
+
+    if (requestedVariable) {
+      const variable = variables.find(
+        (item) => item.variable_id === requestedVariable,
+      );
+
+      if (!variable) {
+        return res.status(404).json({
+          error: `Unknown climate variable: ${requestedVariable}`,
+          available_variables: variables.map((item) => item.variable_id),
+        });
+      }
+
+      return res.json({
+        version: catalog.version,
+        variable,
+        metrics: compatibleMetricsByVariable[requestedVariable] ?? [],
+        thresholds_c:
+          catalog.thresholds.variables[requestedVariable]?.thresholds_c ?? [],
+        default_threshold_c:
+          catalog.thresholds.variables[requestedVariable]?.default_threshold_c ??
+          null,
+        time_windows: catalog.indices.time_windows,
+        datasets: catalog.sources.datasets.filter(
+          (dataset) => dataset.variable === requestedVariable,
+        ),
+      });
+    }
+
+    return res.json({
+      version: catalog.version,
+      generated_from: catalog.generated_from,
+      variables,
+      thresholds: catalog.thresholds,
+      metrics: catalog.indices.metrics,
+      mvp_metrics: catalog.indices.mvp_metrics,
+      time_windows: catalog.indices.time_windows,
+      compatible_metrics_by_variable: compatibleMetricsByVariable,
+      sources: catalog.sources,
+      modes: {
+        forecast_heat: {
+          label: "Forecast heat",
+          precomputed: false,
+          description:
+            "Current short-term heat workflow. This stays live and continues using Open-Meteo forecast data.",
+        },
+        climate_indices: {
+          label: "Climate indices",
+          precomputed: true,
+          description:
+            "Yearly, 5-year, and decade heat layers computed ahead of time from climate NetCDF datasets.",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Climate catalog lookup failed:", error);
+
+    return res.status(500).json({
+      error: "Climate catalog lookup failed",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
 
 app.get("/api/regions", (_req, res) => {
   try {
