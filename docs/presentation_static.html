@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UTRA Project Demo: Spatially-Aware Climate Risk & Chatbot for PICTs (Static View)</title>
+    <!-- Google Fonts for Academic LaTeX Aesthetics -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Fira+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+    
+    <!-- KaTeX for True LaTeX Math Equations Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+
+    <style>
+        :root {
+            --bg-canvas: #f8fafc;
+            --beamer-header: #0f2b48;
+            --beamer-header-sub: #1e3a8a;
+            --beamer-gold: #d4af37;
+            --beamer-text: #0f172a;
+            --beamer-muted: #475569;
+            
+            --block-def-bg: #f0f9ff;
+            --block-def-border: #0284c7;
+            --block-def-header: #0369a1;
+            
+            --block-theorem-bg: #f0fdf4;
+            --block-theorem-border: #16a34a;
+            --block-theorem-header: #15803d;
+            
+            --block-alert-bg: #fff1f2;
+            --block-alert-border: #e11d48;
+            --block-alert-header: #be123c;
+            
+            --block-example-bg: #faf5ff;
+            --block-example-border: #9333ea;
+            --block-example-header: #7e22ce;
+
+            --font-serif: 'Source Serif 4', Georgia, serif;
+            --font-sans: 'Fira Sans', system-ui, sans-serif;
+            --font-mono: 'Fira Code', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020617;
+            font-family: var(--font-sans);
+            color: var(--beamer-text);
+        }
+
+        .stage-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1920px;
+            height: 1080px;
+            transform: translate(-50%, -50%) scale(1);
+            transform-origin: center center;
+            background: var(--bg-canvas);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-canvas);
+            opacity: 0;
+            transform: scale(0.985);
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 1;
+        }
+
+        .slide.active {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        /* All fragments always visible in static mirror */
+        .fragment {
+            opacity: 1 !important;
+            transform: translateY(0) !important;
+        }
+
+        .beamer-header-bar {
+            height: 76px;
+            background: linear-gradient(180deg, var(--beamer-header) 0%, #16365c 100%);
+            border-bottom: 3px solid var(--beamer-gold);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 44px;
+            color: #ffffff;
+            flex-shrink: 0;
+        }
+
+        .beamer-breadcrumbs {
+            font-family: var(--font-sans);
+            font-size: 24px;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #cbd5e1;
+        }
+
+        .beamer-breadcrumbs span.active-sec {
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .beamer-slide-num {
+            font-family: var(--font-mono);
+            font-size: 22px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 5px 18px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #f1f5f9;
+        }
+
+        .slide-header-title {
+            padding: 24px 44px 14px 44px;
+            font-family: var(--font-serif);
+            font-size: 42px;
+            font-weight: 700;
+            color: var(--beamer-header);
+            border-bottom: 1.5px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .slide-header-title .tag {
+            font-family: var(--font-sans);
+            font-size: 18px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 6px 16px;
+            border-radius: 6px;
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .slide-body {
+            flex: 1;
+            padding: 36px 44px;
+            display: flex;
+            gap: 40px;
+            overflow: hidden;
+        }
+
+        .col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .col-2 {
+            flex: 2;
+        }
+
+        .col-1-5 {
+            flex: 1.5;
+        }
+
+        .latex-block {
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1.5px solid transparent;
+            box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.06);
+            background: #ffffff;
+            margin-bottom: 8px;
+        }
+
+        .latex-block .block-header {
+            padding: 14px 24px;
+            font-family: var(--font-sans);
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .latex-block .block-content {
+            padding: 22px 26px;
+            font-family: var(--font-sans);
+            font-size: 24px;
+            line-height: 1.6;
+            color: var(--beamer-text);
+        }
+
+        .block-definition {
+            border-color: var(--block-def-border);
+            background-color: var(--block-def-bg);
+        }
+        .block-definition .block-header {
+            background-color: var(--block-def-header);
+        }
+
+        .block-theorem {
+            border-color: var(--block-theorem-border);
+            background-color: var(--block-theorem-bg);
+        }
+        .block-theorem .block-header {
+            background-color: var(--block-theorem-header);
+        }
+
+        .block-alert {
+            border-color: var(--block-alert-border);
+            background-color: var(--block-alert-bg);
+        }
+        .block-alert .block-header {
+            background-color: var(--block-alert-header);
+        }
+
+        .block-example {
+            border-color: var(--block-example-border);
+            background-color: var(--block-example-bg);
+        }
+        .block-example .block-header {
+            background-color: var(--block-example-header);
+        }
+
+        ul.beamer-list {
+            list-style: none;
+            padding-left: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        ul.beamer-list li {
+            position: relative;
+            padding-left: 32px;
+            font-size: 24px;
+            line-height: 1.55;
+            color: var(--beamer-text);
+        }
+
+        ul.beamer-list li::before {
+            content: "■";
+            position: absolute;
+            left: 0;
+            top: 4px;
+            color: var(--beamer-header-sub);
+            font-size: 16px;
+        }
+
+        .citation-note {
+            font-size: 17px;
+            color: #64748b;
+            font-style: italic;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 10px;
+            margin-top: 14px;
+            font-family: var(--font-serif);
+        }
+
+        .screenshot-card {
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1.5px solid #cbd5e1;
+            box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .screenshot-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .screenshot-caption {
+            padding: 14px 22px;
+            background: #f1f5f9;
+            border-top: 1.5px solid #e2e8f0;
+            font-family: var(--font-sans);
+            font-size: 19px;
+            font-weight: 500;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .title-slide-container {
+            flex: 1;
+            padding: 64px 88px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+
+        .title-header-box {
+            background: var(--beamer-header);
+            border-radius: 14px;
+            padding: 52px;
+            color: #ffffff;
+            box-shadow: 0 20px 35px -10px rgba(15, 43, 72, 0.35);
+        }
+
+        .title-header-box h1 {
+            font-family: var(--font-serif);
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1.25;
+            margin-bottom: 18px;
+        }
+
+        .title-header-box h2 {
+            font-family: var(--font-sans);
+            font-size: 26px;
+            font-weight: 300;
+            color: #93c5fd;
+            letter-spacing: 0.5px;
+        }
+
+        .authors-box {
+            display: flex;
+            gap: 44px;
+            margin-top: 32px;
+        }
+
+        .author-card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 28px 36px;
+            border: 1.5px solid #cbd5e1;
+            flex: 1;
+            box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .author-card h3 {
+            font-size: 24px;
+            color: var(--beamer-header);
+            margin-bottom: 8px;
+        }
+
+        .author-card p {
+            font-size: 20px;
+            color: var(--beamer-muted);
+        }
+
+        .beamer-footer-bar {
+            height: 48px;
+            background: #0f172a;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 44px;
+            font-size: 18px;
+            font-family: var(--font-sans);
+            flex-shrink: 0;
+        }
+
+        .beamer-footer-bar span.proj-name {
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+
+        .controls-overlay {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 10px 24px;
+            border-radius: 30px;
+            border: 1.5px solid rgba(255, 255, 255, 0.25);
+            font-family: var(--font-mono);
+            color: #ffffff;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+        }
+
+        .ctrl-btn {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            font-size: 18px;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            padding: 8px 18px;
+            border-radius: 20px;
+            transition: all 0.2s;
+        }
+
+        table.beamer-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 22px;
+            background: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1.5px solid #cbd5e1;
+        }
+
+        table.beamer-table th {
+            background: var(--beamer-header);
+            color: #ffffff;
+            text-align: left;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 23px;
+        }
+
+        table.beamer-table td {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            line-height: 1.5;
+        }
+
+        table.beamer-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 16:9 Viewport Stage Container -->
+    <div class="stage-container" id="stage">
+        
+        <!-- SLIDE 1: Title Slide -->
+        <div class="slide active" id="slide-1">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>UTRA Summer 2026</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">UTRA Project Demo</span>
+                </div>
+                <div class="beamer-slide-num">1 / 10</div>
+            </div>
+            <div class="title-slide-container">
+                <div class="title-header-box fragment visible">
+                    <h1>Spatially-Aware Climate Risk Visualization & Decision-Support Chatbot for PICTs</h1>
+                    <h2>UTRA Summer Research Project — Brown EarthLab</h2>
+                </div>
+
+                <div class="authors-box fragment visible">
+                    <div class="author-card">
+                        <h3>Presenter & Contributor</h3>
+                        <p><strong>Gregory Lazatin</strong></p>
+                        <p>Data Exploration Engine, Bivariate Mapping & Backend Services</p>
+                    </div>
+                    <div class="author-card">
+                        <h3>Research Partner</h3>
+                        <p><strong>Yigit Efe Enhos</strong></p>
+                        <p>Conversational UI/UX Design & Geospatial Python Tool Suite</p>
+                    </div>
+                </div>
+
+                <div class="latex-block block-definition fragment visible" style="margin-top: 20px;">
+                    <div class="block-header">Research Proposal Abstract</div>
+                    <div class="block-content" style="font-size: 21px;">
+                        <em>"Develop a data exploration interface to visualize uncertainty in climate projections, and generate a spatially-aware chatbot for non-expert decision makers in Pacific Island Countries and Territories (PICTs)."</em>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>Brown University — EarthLab</span>
+                <span class="proj-name">PICT Climate Risk Platform</span>
+                <span>July 2026</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: Research Problem & Context -->
+        <div class="slide" id="slide-2">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Background</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">Climate Vulnerability & GCM Gaps</span>
+                </div>
+                <div class="beamer-slide-num">2 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>1. Problem Statement: PICT Climate Risk & Uncertainty</span>
+                <span class="tag">Motivation</span>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="latex-block block-alert fragment visible">
+                        <div class="block-header">Vulnerability of Pacific Small Islands</div>
+                        <div class="block-content">
+                            PICTs are on the frontline of global climate impacts, facing severe ocean warming, extreme heat stress, and coastal inundation.
+                            <div class="citation-note">Source: IPCC WGII AR6 Report, Ch. 15 (Small Islands) &mdash; Mycoo, Wairiu et al., 2022 (doi:10.1017/9781009325844.017).</div>
+                        </div>
+                    </div>
+                    <div class="latex-block block-definition fragment visible">
+                        <div class="block-header">Coarse Global Climate Models (GCMs)</div>
+                        <div class="block-content">
+                            Standard CMIP6 ensemble models underrepresent small island geographies. Key <strong>fine-scale drivers</strong> such as Tropical Cyclones (TCs) and localized storm surge are not directly simulated, creating high model output uncertainty.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="latex-block block-example fragment visible">
+                        <div class="block-header">Decision-Making Gaps</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible"><strong>Multidimensional Uncertainty:</strong> Decision makers often receive simple model averages without confidence bounds or spatial variance metrics.</li>
+                                <li class="fragment visible"><strong>Data Inaccessibility:</strong> Large NetCDF and raster datasets require specialized GIS expertise to extract actionable insights.</li>
+                                <li class="fragment visible"><strong>Platform Goal:</strong> Deliver a dual-interface platform (Bivariate Exploration Map + AI Chatbot) to communicate geographic insights alongside uncertainty bounds.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 1</span>
+                <span class="proj-name">Problem Formulation</span>
+                <span>Slide 2</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: Dual Architecture Overview -->
+        <div class="slide" id="slide-3">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Architecture</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">System Platform Overview</span>
+                </div>
+                <div class="beamer-slide-num">3 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>2. Dual Platform System Architecture & Motivation</span>
+                <span class="tag">System Design</span>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="latex-block block-theorem fragment visible">
+                        <div class="block-header">Module 1: earthlab-fiji-map (Experimental Testbed)</div>
+                        <div class="block-content">
+                            <strong>Side-Project & Analytical Sandbox</strong>
+                            <ul class="beamer-list" style="margin-top: 12px;">
+                                <li class="fragment visible"><strong>Role & Motivation:</strong> Serves as an isolated experimental testbed to prototype, benchmark, and optimize high-performance spatial analysis algorithms and 2D bivariate map overlays before full chatbot integration.</li>
+                                <li class="fragment visible"><strong>Core Deliverables:</strong> 3&times;3 Bivariate matrix, GPU trace reduction (1,137 &rarr; 3 layers), dynamic H3 polyfilling (&lt;2s build cache), and 111 CHVA facility spatial joins.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="latex-block block-definition fragment visible">
+                        <div class="block-header">Module 2: pict-climate-risk-viz-chatbot (Main Platform)</div>
+                        <div class="block-content">
+                            <strong>Primary End-User Decision-Support System</strong>
+                            <ul class="beamer-list" style="margin-top: 12px;">
+                                <li class="fragment visible"><strong>Role & Motivation:</strong> The core target application designed for non-expert decision makers to interact with climate data via natural language.</li>
+                                <li class="fragment visible"><strong>Core Deliverables:</strong> Minimalist conversational UI, 13 Python geospatial analytical tools, interactive <span class="math-inline">MapCanvas</span>, zonal stats drawer, and live SDMX data services.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 2</span>
+                <span class="proj-name">System Architecture</span>
+                <span>Slide 3</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 4: Fiji Bivariate Map Demo -->
+        <div class="slide" id="slide-4">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Module 1</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">Bivariate Map & GPU Optimization</span>
+                </div>
+                <div class="beamer-slide-num">4 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>3. Fiji Interactive Bivariate Map (earthlab-fiji-map)</span>
+                <span class="tag">Data Viz</span>
+            </div>
+            <div class="slide-body">
+                <div class="col-1-5 fragment visible">
+                    <div class="screenshot-card">
+                        <img src="images/fiji_bivariate_map.png" alt="Fiji Bivariate Map Demo">
+                        <div class="screenshot-caption">
+                            <span>Interactive Fiji Map Dashboard</span>
+                            <span style="color: #0284c7; font-weight: bold;">fiji_optimized.html</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="latex-block block-theorem fragment visible">
+                        <div class="block-header">3&times;3 Bivariate Classification Formula</div>
+                        <div class="block-content">
+                            Combines projected temperature mean \(\text{raster\_mean}\) with model uncertainty \(\sigma\) into a 9-class color index:
+                            $$\text{Class} = \text{Bin}_{\text{temp}} + 3 \times \text{Bin}_{\text{uncertainty}}$$
+                            where \(\text{Bin}_{\text{temp}}, \text{Bin}_{\text{uncertainty}} \in \{0, 1, 2\}\) based on tercile distribution bounds.
+                        </div>
+                    </div>
+
+                    <div class="latex-block block-example fragment visible">
+                        <div class="block-header">GPU Trace Rendering Optimization</div>
+                        <div class="block-content">
+                            Reduced Mapbox trace overhead from <strong>1,137 separate traces down to 3 static GPU layers</strong> (\(\text{Choroplethmapbox}\)), completely resolving browser interaction freezes.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 3</span>
+                <span class="proj-name">Fiji Bivariate Map</span>
+                <span>Slide 4</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: CHVA Facility & H3 Gridding -->
+        <div class="slide" id="slide-5">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Module 1</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">CHVA Healthcare Layer & H3 Gridding</span>
+                </div>
+                <div class="beamer-slide-num">5 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>4. CHVA Healthcare Facility Layer & H3 Polyfilling</span>
+                <span class="tag">Spatial Join</span>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="latex-block block-definition fragment visible">
+                        <div class="block-header">111 CHVA Healthcare Facility Dataset</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible"><strong>Dataset Definition:</strong> Fiji Climate Change & Health Vulnerability Assessment (CHVA) dataset containing 111 mapped healthcare infrastructure points categorized by tier: Hospitals (Red), Health Centres (Orange), and Nursing Stations (Blue).</li>
+                                <li class="fragment visible"><strong>Spatial Join:</strong> Performed spatial overlay (\(\text{gpd.sjoin}\)) linking facility GPS coordinates to administrative subdivision polygons.</li>
+                                <li class="fragment visible"><em>[Note: Insert screenshot of all 111 loaded facility locations here]</em></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="latex-block block-theorem fragment visible">
+                        <div class="block-header">Dynamic H3 Polyfilling & Geometric Cache</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible">Multi-resolution Uber H3 hexagonal spatial binning (Resolutions 5, 6, 7).</li>
+                                <li class="fragment visible">Built geometric caching layer (\(\text{data/cache/}\)), cutting pipeline build time from <strong>~30s down to &lt;2s</strong>.</li>
+                                <li class="fragment visible">Truncated GeoJSON coordinates to 6 decimal places (~10 cm precision) for fast network transmission.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 4</span>
+                <span class="proj-name">CHVA & H3 Indexing</span>
+                <span>Slide 5</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: Conversational Chatbot UI -->
+        <div class="slide" id="slide-6">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Module 2</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">Conversational Chatbot UI</span>
+                </div>
+                <div class="beamer-slide-num">6 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>5. Spatially-Aware Decision Chatbot Interface</span>
+                <span class="tag">Chatbot UI</span>
+            </div>
+            <div class="slide-body">
+                <div class="col-1-5 fragment visible">
+                    <div class="screenshot-card">
+                        <img src="images/chatbot_main_ui.png" alt="Chatbot Main UI Demo">
+                        <div class="screenshot-caption">
+                            <span>Climate Risk A.I. Frontend Prototype</span>
+                            <span style="color: #059669; font-weight: bold;">Port 5173</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="latex-block block-definition fragment visible">
+                        <div class="block-header">Minimalist Environmental Aesthetic</div>
+                        <div class="block-content">
+                            Designed by partner Efe using soft sand tones (\(\#\text{f4f1eb}\)) tailored for non-expert decision makers reviewing environmental reports.
+                        </div>
+                    </div>
+                    <div class="latex-block block-example fragment visible">
+                        <div class="block-header">Guided Starter Prompt Cards</div>
+                        <div class="block-content">
+                            Onboards non-expert users with high-yield starter queries ("Explore climate risk in Fiji", "Explain projection uncertainty", "Compare wet-bulb trends").
+                            <div class="citation-note" style="margin-top: 14px;">[Note: Replace screenshot above with updated high-resolution chatbot layout screenshot]</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 5</span>
+                <span class="proj-name">Chatbot UI</span>
+                <span>Slide 6</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 7: MapCanvas & Zonal Statistics -->
+        <div class="slide" id="slide-7">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Module 2</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">Spatial Selection & SDMX Ingestion</span>
+                </div>
+                <div class="beamer-slide-num">7 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>6. Spatial Query Engine & SDMX Live Backend</span>
+                <span class="tag">Backend Service</span>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="latex-block block-theorem fragment visible">
+                        <div class="block-header">Interactive MapCanvas & Draw Controls</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible">Mapbox GL JS map canvas featuring thin boundary outlines, tooltips, and dynamic legends.</li>
+                                <li class="fragment visible">Interactive bounding box and polygon drawing controls (\(\text{DrawControls.tsx}\)).</li>
+                                <li class="fragment visible">Real-time zonal statistics computation over custom drawn polygons.</li>
+                                <li class="fragment visible"><em>[Note: Add dynamic GIF/animation showing polygon drawing & zonal stats calculation flow]</em></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="latex-block block-definition fragment visible">
+                        <div class="block-header">Live SDMX Data API & H3 Binner</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible">\(\text{sdmxApiClient.js}\): Ingests live SDMX regional climate metrics directly from international statistical endpoints.</li>
+                                <li class="fragment visible">\(\text{h3Binner.js}\): Aggregates live climate indicators into H3 spatial cells on the fly.</li>
+                                <li class="fragment visible">\(\text{cacheManager.js}\): Manages backend spatial query caching.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 6</span>
+                <span class="proj-name">Spatial Engine</span>
+                <span>Slide 7</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 8: 13 Analytical Geospatial Python Tools -->
+        <div class="slide" id="slide-8">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Module 2</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">13 Python Geospatial Tools</span>
+                </div>
+                <div class="beamer-slide-num">8 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>7. 13-Tool Python Analytical Geospatial Engine</span>
+                <span class="tag">Tool Suite</span>
+            </div>
+            <div class="slide-body">
+                <div class="col-2 fragment visible">
+                    <table class="beamer-table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Python Tool Modules</th>
+                                <th>Analytical Function</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="fragment visible">
+                                <td><strong>Spatial & Region</strong></td>
+                                <td><code>spatial.py</code>, <code>region.py</code></td>
+                                <td>PICT region lookup, administrative boundary filtering</td>
+                            </tr>
+                            <tr class="fragment visible">
+                                <td><strong>Climate Extremes</strong></td>
+                                <td><code>climate.py</code>, <code>extremes.py</code>, <code>thresholds.py</code></td>
+                                <td>Anomaly calculation, extreme heat days, threshold exceedances</td>
+                            </tr>
+                            <tr class="fragment visible">
+                                <td><strong>Aggregation & Trends</strong></td>
+                                <td><code>statistics.py</code>, <code>aggregation.py</code>, <code>temporal.py</code></td>
+                                <td>Spatial/temporal aggregation, variance, trend lines</td>
+                            </tr>
+                            <tr class="fragment visible">
+                                <td><strong>Risk & Vulnerability</strong></td>
+                                <td><code>exposure.py</code>, <code>assets.py</code>, <code>ranking.py</code>, <code>asset_ranking.py</code></td>
+                                <td>Asset exposure calculation, infrastructure vulnerability ranking</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col">
+                    <div class="latex-block block-example fragment visible">
+                        <div class="block-header">LLM Function Calling</div>
+                        <div class="block-content">
+                            Enables the LLM to programmatically route natural language prompts (e.g., <em>"Find vulnerable hospitals in Fiji exposed to extreme heat"</em>) directly to Python spatial operations.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 7</span>
+                <span class="proj-name">Geospatial Tools</span>
+                <span>Slide 8</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 9: Outstanding Features Roadmap -->
+        <div class="slide" id="slide-9">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Roadmap</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">Remaining Proposal Features</span>
+                </div>
+                <div class="beamer-slide-num">9 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>8. Remaining Features to Complete Proposal</span>
+                <span class="tag">Future Work</span>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="latex-block block-alert fragment visible">
+                        <div class="block-header">Priority 0: Immediate Implementation</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible"><strong>Full LLM Tool Execution Loop:</strong> Connect Express server to Python tool scripts via formal JSON Schemas.</li>
+                                <li class="fragment visible"><strong>Dynamic Recharts Trend Lines:</strong> Embed probability distributions & 2050/2100 trend charts in sidebar.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="latex-block block-definition fragment visible">
+                        <div class="block-header">Priority 1: High Impact Data Layers</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible"><strong>True CMIP6 Model Variance:</strong> Replace mock alpha with real spatial standard deviation (\(\text{raster\_std}\)).</li>
+                                <li class="fragment visible"><strong>Tropical Cyclone Hazard Datasets:</strong> Ingest TC track hazard maps & storm surge inundation proxies.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="latex-block block-example fragment visible">
+                        <div class="block-header">Priority 2 & 3: Platform Enhancements</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible"><strong>RAG System:</strong> Vector-index IPCC regional reports & SPREP briefings in ChromaDB/pgvector.</li>
+                                <li class="fragment visible"><strong>Low-Bandwidth Dashboard:</strong> Load Plotly via CDN to shrink \(\text{fiji\_optimized.html}\) from 18 MB to &lt;500 KB.</li>
+                                <li class="fragment visible"><strong>React Flow Node Graph:</strong> Render visual execution graph of LLM spatial reasoning.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Section 8</span>
+                <span class="proj-name">Roadmap</span>
+                <span>Slide 9</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 10: Conclusion & Q&A (Fixed Layout) -->
+        <div class="slide" id="slide-10">
+            <div class="beamer-header-bar">
+                <div class="beamer-breadcrumbs">
+                    <span>Conclusion</span> &nbsp;&rsaquo;&nbsp; <span class="active-sec">Summary & Q&A</span>
+                </div>
+                <div class="beamer-slide-num">10 / 10</div>
+            </div>
+            <div class="slide-header-title">
+                <span>9. Summary & Acknowledgments</span>
+                <span class="tag">Conclusion</span>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="latex-block block-theorem fragment visible">
+                        <div class="block-header">Summary of Key Deliverables</div>
+                        <div class="block-content">
+                            <ul class="beamer-list">
+                                <li class="fragment visible">Successfully created an interactive 2D Bivariate Uncertainty Map for Fiji with 3 GPU layer optimization.</li>
+                                <li class="fragment visible">Built a warm minimalist AI chatbot UI with 13 analytical geospatial Python tool wrappers.</li>
+                                <li class="fragment visible">Integrated SDMX live data ingestion, H3 hexagonal spatial binning, and spatial query panels.</li>
+                                <li class="fragment visible">Established comprehensive E2E Playwright test automation across both codebases.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="latex-block block-example fragment visible">
+                        <div class="block-header">Questions & Discussion</div>
+                        <div class="block-content" style="padding: 36px 28px; text-align: center;">
+                            <p style="font-size: 26px; font-weight: 600; color: var(--beamer-header); margin-bottom: 16px;">Thank you for your time!</p>
+                            <p style="font-size: 22px; color: var(--beamer-muted);">Open for Questions, Comments, and Discussion</p>
+                            <div style="margin-top: 28px; padding-top: 20px; border-top: 1.5px solid #e2e8f0; font-family: var(--font-serif); font-size: 20px; color: var(--beamer-header-sub);">
+                                Brown University EarthLab &mdash; UTRA Summer 2026
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="beamer-footer-bar">
+                <span>UTRA Project — Conclusion</span>
+                <span class="proj-name">Final Slide</span>
+                <span>Slide 10</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Navigation Controls Bar -->
+    <div class="controls-overlay">
+        <button class="ctrl-btn" id="prev-btn" title="Previous Slide (&larr;)"> Prev</button>
+        <span id="slide-indicator" style="font-family: var(--font-mono); font-size: 16px;">Slide 1 / 10</span>
+        <button class="ctrl-btn" id="next-btn" title="Next Slide (&rarr; / Space)">Next </button>
+    </div>
+
+    <script>
+        function scaleStage() {
+            const stage = document.getElementById('stage');
+            const targetWidth = 1920;
+            const targetHeight = 1080;
+            const scaleX = window.innerWidth / targetWidth;
+            const scaleY = window.innerHeight / targetHeight;
+            const scale = Math.min(scaleX, scaleY);
+            stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        }
+        window.addEventListener('resize', scaleStage);
+        scaleStage();
+
+        let currentSlide = 1;
+        const totalSlides = 10;
+
+        function showSlide(num) {
+            if (num < 1) num = 1;
+            if (num > totalSlides) num = totalSlides;
+            currentSlide = num;
+            document.querySelectorAll('.slide').forEach((slide, idx) => {
+                slide.classList.toggle('active', idx === currentSlide - 1);
+            });
+            document.getElementById('slide-indicator').textContent = `Slide ${currentSlide} / ${totalSlides}`;
+        }
+
+        document.getElementById('prev-btn').addEventListener('click', () => showSlide(currentSlide - 1));
+        document.getElementById('next-btn').addEventListener('click', () => showSlide(currentSlide + 1));
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+                e.preventDefault();
+                showSlide(currentSlide + 1);
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                showSlide(currentSlide - 1);
+            }
+        });
+    </script>
+</body>
+</html>
