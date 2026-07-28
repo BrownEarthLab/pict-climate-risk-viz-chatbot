@@ -1,0 +1,56 @@
+{
+  "version": "0.1.0",
+  "description": "Approved climate-analysis thresholds. The LLM/frontend should choose from these options rather than invent thresholds at query time.",
+  "units": "degrees Celsius",
+  "variables": {
+    "tasmax": {
+      "label": "Daily maximum near-surface air temperature",
+      "short_label": "Tmax",
+      "unit": "\u00b0C",
+      "thresholds_c": [
+        30,
+        32,
+        35,
+        38,
+        40
+      ],
+      "default_threshold_c": 35,
+      "notes": [
+        "Use for dry/ambient daily maximum heat exposure."
+      ]
+    },
+    "wet_bulb_temperature": {
+      "label": "Wet-bulb temperature",
+      "short_label": "WBT",
+      "unit": "\u00b0C",
+      "thresholds_c": [
+        24,
+        26,
+        28,
+        30,
+        32
+      ],
+      "default_threshold_c": 28,
+      "notes": [
+        "Use for humid-heat stress. Interpret separately from Tmax thresholds."
+      ]
+    },
+    "apparent_temperature": {
+      "label": "Apparent temperature",
+      "short_label": "Apparent T",
+      "unit": "\u00b0C",
+      "thresholds_c": [
+        26,
+        30,
+        32,
+        35,
+        38,
+        40
+      ],
+      "default_threshold_c": 32,
+      "notes": [
+        "Use for forecast heat-stress style analysis when available."
+      ]
+    }
+  }
+}
