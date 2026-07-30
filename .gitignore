@@ -85,5 +85,7 @@ sync-specs.sh
 # Data cache (generated, not source)
 # -----------------------------
 data/cache/
+docs/images/
+.playwright-mcp/
 
 # -----------------------------

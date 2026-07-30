@@ -8,6 +8,9 @@
 ### Research Background
 Pacific Island Countries and Territories (PICTs) face extreme vulnerability to climate impacts, yet are underrepresented in global climate models (GCMs). Key drivers like Tropical Cyclones (TCs) and localized coastal dynamics are poorly resolved in coarse CMIP ensembles. Furthermore, multidimensional model output and uncertainty make raw datasets inaccessible to local decision makers.
 
+### Original Project Proposal
+*"The output is expected to make it easier to ask questions and get answers from large geospatial datasets, making the process more effortless and accessible to a broader audience. It also provides an open AI framework for spatially aware chatbots that deliver not only descriptive text but also geographic insights and visualizations."*
+
 ### UTRA Summer Expectations vs. Current Achievements
 
 ```mermaid
@@ -65,7 +68,7 @@ graph TD
 * **Interactive MapCanvas**: Built `MapCanvas.tsx` and `useMapbox` hook featuring dynamic Mapbox sources, thin boundary outlines, hover tooltips, and decoupled layer visibility controls.
 * **Spatial Query & Zonal Statistics**: Created `SpatialQueryPanel.tsx` and `DrawControls.tsx` for drawing bounding polygons, running spatial queries, and returning real-time zonal statistics.
 * **SDMX Live Backend Infrastructure**: Architected Express backend (`server.js`) with modular services: `sdmxApiClient.js` (live SDMX metrics), `cacheManager.js`, `h3Binner.js`, and `coordinator.js`.
-* **Dataset Explorer & Fine-Tuning Tooling**: Created frontend views for historical temperature and wet-bulb globe temperature, as well as prompt dataset generators for LLM fine-tuning.
+* **Dataset Explorer & Fine-Tuning Tooling**: Created frontend views for historical temperature and wet-bulb temperature, as well as prompt dataset generators for LLM fine-tuning.
 * **E2E WebGL Testing Infrastructure**: Integrated Playwright browser testing for Mapbox GL JS spatial selections and UI state updates.
 
 ---
@@ -162,3 +165,97 @@ If compiling a formal written report or final UTRA paper, use the following sect
 6. **Future Work**:
    - Complete LLM function-calling loop, Tropical Cyclone hazard layer ingestion, RAG integration for IPCC literature, and low-bandwidth dashboard deployment.
 7. **Conclusion & Acknowledgments**.
+
+---
+
+## 6. Lab Meeting Slide Presentation Outline (10 Minutes)
+
+### Slide Structure
+
+**Slide 1: Title Slide (30 sec)**
+- Project title: *Spatially-Aware Climate Risk Visualization & Decision-Support Chatbot for PICTs*
+- Your name, partner name (Efe), UTRA affiliation, date
+- Optional: Small screenshot of the chatbot UI or Fiji map
+
+**Slide 2: The Problem (1 min)**
+- PICTs face extreme climate vulnerability but are underrepresented in GCMs
+- Coarse CMIP ensembles miss local dynamics (tropical cyclones, coastal impacts)
+- Decision makers lack accessible tools to explore multidimensional climate data
+- *Key message:* "We need better ways to communicate spatial climate risk to non-experts"
+
+**Slide 3: Research Goals (1 min)**
+- Build intuitive data exploration interface for uncertainty visualization
+- Create spatially-aware chatbot that answers questions about geospatial datasets
+- Provide open AI framework for geographic insights and visualizations
+- *Reference the original proposal quote*
+
+**Slide 4: System Architecture Overview (1 min)**
+- Two-repo approach: `earthlab-fiji-map` (bivariate mapping) + `pict-climate-risk-viz-chatbot` (conversational interface)
+- High-level diagram showing: Frontend UI → Backend Services → Data Sources (SDMX, CMIP6, CHVA)
+- Mention the 13 Python geospatial tools and Mapbox integration
+
+**Slides 5-6: Fiji Interactive Map Demo (2.5 min)**
+*Slide 5: Bivariate Mapping & Performance*
+- Screenshot: 3x3 bivariate choropleth (temperature mean vs. uncertainty)
+- Key achievement: Reduced 1,137 traces → 3 GPU layers (eliminated browser freezes)
+- Dynamic H3 grid system (Res 5-7) with <2s build times (down from 30s)
+
+*Slide 6: Facility Integration & UI*
+- Screenshot: CHVA facility layer with filter controls
+- 111 healthcare facilities integrated via spatial joins
+- Glassmorphic multi-tab sidebar (Map Config, Filters, Facility Directory)
+- Mention E2E Playwright test coverage
+
+**Slides 7-8: Spatially-Aware Chatbot Demo (2.5 min)**
+*Slide 7: Conversational UI*
+- Screenshot: Warm minimalist dashboard with starter prompt cards
+- Designed for non-expert decision makers
+- Region selector (Fiji/Kiribati/Tonga), settings, and help modals
+
+*Slide 8: Spatial Query Engine*
+- Screenshot: MapCanvas with drawn polygon and zonal statistics panel
+- Interactive spatial selection and real-time statistics
+- Integration with SDMX live data and H3 binning
+
+**Slide 9: Backend & Analytical Tools (1 min)**
+- 13 Python geospatial tool wrappers (spatial, climate, exposure, ranking)
+- SDMX live data ingestion and caching
+- H3 dynamic binning service
+- Express backend with modular architecture
+
+**Slide 10: What's Next & Q&A (1 min)**
+- P0: Complete end-to-end LLM function-calling loop
+- P0: Add dynamic trend/uncertainty charts (Recharts/D3)
+- P1: True CMIP6 ensemble variance and tropical cyclone datasets
+- Open for questions
+
+### Condensed Demo Script (10 Minutes)
+
+**[0:00-1:00] Problem & Context**
+- *"Pacific Small Islands are on the frontline of climate risk, yet global climate models fail to resolve local dynamics. Decision makers need better tools to explore and understand spatial climate data."*
+
+**[1:00-2:00] Research Goals**
+- *"Our goal was to build two things: an intuitive bivariate visualization interface for exploring climate uncertainty, and a spatially-aware AI chatbot that makes geospatial datasets accessible through natural language."*
+
+**[2:00-3:00] Architecture Overview**
+- Brief walkthrough of the two-repo system and how data flows from SDMX/CMIP6 through backend services to the frontend interfaces.
+
+**[3:00-5:30] Fiji Map Highlights**
+- Show bivariate map screenshot, emphasize the 3x3 matrix (temperature risk vs. projection uncertainty)
+- Highlight performance engineering: *"We reduced trace overhead from 1,137 to 3 GPU layers"*
+- Show CHVA facility integration and filtering capabilities
+- Mention H3 grid optimization: *"Build times went from 30 seconds to under 2 seconds"*
+
+**[5:30-8:00] Chatbot Highlights**
+- Show warm minimalist UI with starter prompt cards
+- Demonstrate spatial query workflow: draw polygon → get zonal statistics
+- Mention the 13 analytical tools that power the backend
+- Show SDMX live data integration
+
+**[8:00-9:00] Backend & Tools**
+- Quick overview of the Python geospatial toolkit
+- Mention SDMX ingestion, H3 binning, and modular Express backend
+
+**[9:00-10:00] Roadmap & Q&A**
+- *"Next steps include completing the full LLM function-calling loop, adding trend visualization charts, and integrating tropical cyclone hazard layers."*
+- Open for questions
