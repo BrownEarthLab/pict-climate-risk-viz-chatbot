@@ -162,8 +162,15 @@ export function useMapbox() {
               0.7, "#075985",
               1.0, "#082f49",
             ],
-            "fill-opacity": 0.65,
-            "fill-outline-color": "rgba(255, 255, 255, 0.2)",
+            "fill-opacity": [
+              "case",
+              ["boolean", ["feature-state", "highlighted"], false],
+              0.95,
+              ["boolean", ["feature-state", "hovered"], false],
+              0.85,
+              0.65,
+            ],
+            "fill-outline-color": "rgba(255, 255, 255, 0.4)",
           },
         });
 

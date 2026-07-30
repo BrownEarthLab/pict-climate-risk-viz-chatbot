@@ -5,6 +5,9 @@ import { useMapbox } from "../../hooks/useMapbox";
 import FeatureHighlighter from "./FeatureHighlighter";
 import SpatialQueryPanel from "./SpatialQueryPanel";
 import MapControls from "./MapControls";
+import { StorytellerDeck } from "../story/StorytellerDeck";
+import { LinkedRiskCharts } from "./LinkedRiskCharts";
+import { useBrushingState } from "../../state/useBrushingState";
 import type {
   AdminAssetLookupRequestOptions,
   AssetHeatRiskRequestOptions,
@@ -859,6 +862,15 @@ const MapCanvas = ({
     showGlobalDataset,
     setShowGlobalDataset,
   } = useMapbox();
+
+  const {
+    selectedIds,
+    hoveredId,
+    activeChapter,
+    setSelectedIds,
+    setHoveredId,
+    setActiveChapter,
+  } = useBrushingState();
 
   const initialAnalysisSettings = useMemo(loadAnalysisSettings, []);
 
@@ -1885,6 +1897,16 @@ const MapCanvas = ({
             </button>
           )}
 
+          {/* 4-Chapter Guided Storyteller Deck Bar */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1100] w-[min(92%,720px)]">
+            <StorytellerDeck
+              currentChapter={activeChapter ?? 1}
+              onSelectChapter={setActiveChapter}
+              mapboxMap={mapboxMap}
+              setActiveLayer={setActiveLayer}
+            />
+          </div>
+
           <div className="absolute bottom-16 left-4 top-6 z-20 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur-md">
             <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
@@ -2568,6 +2590,15 @@ const MapCanvas = ({
                         </div>
                       )}
                     </div>
+
+                    {/* Bi-directional D3 Linked Risk Charts */}
+                    <LinkedRiskCharts
+                      selectedIds={selectedIds}
+                      hoveredId={hoveredId}
+                      onSelectIds={setSelectedIds}
+                      onHoverId={setHoveredId}
+                      activeLayer={activeLayer}
+                    />
                   </div>
                 )}
               </div>
