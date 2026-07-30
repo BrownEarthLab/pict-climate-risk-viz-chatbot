@@ -2,10 +2,20 @@
 
 **Status: superseded, never shipped.** Direction redirected by the PI on 2026-07-30.
 
-This is a **tracked mirror** of the OpenSpec change artifacts. The working copy lives at
-`openspec/changes/archive/2026-07-30-pacific-climate-brushing-viz/`, but `openspec/` is
-excluded from git via `.git/info/exclude`, so those files exist only on the machine that
-authored them. This mirror is what actually survives a push or a fresh clone.
+This is a **mirror** of the OpenSpec change artifacts, tracked in the application repo.
+The system of record is the spec vault at
+`/home/node/global-sandbox/project-specs/pict-climate-risk-viz-chatbot`, synced by
+`./sync-specs.sh push` / `pull` — `openspec/` is excluded from the application repo via
+`.git/info/exclude` precisely because the vault versions it instead.
+
+The mirror exists because **the vault has no configured git remote**, so it is a
+single-disk copy. Once `feature/pacific-climate-brushing-viz` is pushed, this mirror is
+the only copy of these artifacts that exists off this machine. Treat the vault as
+authoritative for live changes and this directory as a frozen archival snapshot; the
+change is superseded and should not be edited in either location.
+
+Working copy in the vault:
+`openspec/changes/archive/2026-07-30-pacific-climate-brushing-viz/`.
 
 The delta spec here was **deliberately not synced** into `openspec/specs/`. The change's
 headline capability — bi-directional brushing between Mapbox GL and D3 charts — was never
