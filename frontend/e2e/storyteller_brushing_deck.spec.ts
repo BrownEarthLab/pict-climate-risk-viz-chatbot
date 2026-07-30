@@ -9,7 +9,7 @@ test.describe("Storyteller Deck & Linked Brushing Visualization", () => {
     await expect(page.getByRole("button", { name: "Ch. 1: The Heat Frontier" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ch. 2: Lifelines Under Threat" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ch. 3: Pacific Resilience" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Ch. 4: Open AI Exploration" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ch. 4: Open AI Explorer Mode" })).toBeVisible();
   });
 
   test("clicking chapter buttons updates narrative content and provenance", async ({ page }) => {
