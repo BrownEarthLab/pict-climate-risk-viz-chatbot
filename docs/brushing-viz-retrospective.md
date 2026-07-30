@@ -190,6 +190,32 @@ kind is what you just lost.
 
 ---
 
+## 2a. Final measured state at archival (2026-07-30)
+
+Last run before freezing: `storyteller_brushing_deck.spec.ts` +
+`test_dynamic_map_layers.spec.ts` → **13 passed, 3 failed, 1 skipped.**
+
+The three failures are exactly the three new assertions that read **map state** rather
+than the DOM — layer visibility across the four dynamic layers, chart-brush
+`getFeatureState` set/clear, and map→chart hover linking. Every DOM-level test passed.
+This is §2.1 reproducing itself on the way out the door, and it is the cleanest evidence
+in the repo for why v2 should assert against the map.
+
+Two things this pins down precisely, and they should not be conflated:
+
+- **The `style.load` fix worked.** `getLayoutProperty("sea-level-h3-layer",
+  "visibility")` returns `"none"` — a *value*, not `undefined`. The layer is registered.
+  Custom sources and layers now exist, which they did not before.
+- **One defect remains, and it is upstream of everything else.** Clicking a dynamic
+  layer button updates React state and renders the matching legend, but the Mapbox layer
+  stays at `visibility: "none"`. The toggle never reaches `setLayoutProperty` on the map.
+
+That single unresolved bug plausibly explains the other two failures for free: if the
+CHVA layer is never made visible, `setFeatureState` has nothing to paint and map hover
+has nothing to hit. **Nobody verified this** — the work stopped here. If v2 ever wants to
+resurrect this branch, that is the one thread to pull first, and it is a much smaller
+job than the state of the test suite suggests.
+
 ## 3. What is direction-dependent and should *not* be carried forward uncritically
 
 - **The 4-chapter storyteller deck.** The narrative framing ("Rising Tides, Heat & Human

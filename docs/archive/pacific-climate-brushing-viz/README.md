@@ -22,6 +22,14 @@ false claim.
 3. `proposal.md`, `architecture.md`, `tasks.md`, `tests.md`, `specs/` — the original
    change as written. Note the superseded banners in `proposal.md`.
 
+## State at the moment of freezing
+
+`storyteller_brushing_deck.spec.ts` + `test_dynamic_map_layers.spec.ts`: **13 passed, 3
+failed, 1 skipped.** All three failures are the assertions that read map state rather
+than the DOM. One known unresolved defect sits upstream of them: toggling a dynamic
+layer updates React state and the legend, but the Mapbox layer stays at
+`visibility: "none"`. See §2a of the retrospective.
+
 ## Code reference
 
 The implementation is on branch `feature/pacific-climate-brushing-viz`, tagged
