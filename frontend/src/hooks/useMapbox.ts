@@ -5,7 +5,14 @@ import { getApiUrl, apiFetch } from "../config/api";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN ?? "";
 
-export type ClimateLayer = "tas" | "wet_bulb" | "sea_level" | "power_gen" | "water_access" | null;
+export type ClimateLayer =
+  | "tas"
+  | "wet_bulb"
+  | "sea_level"
+  | "power_gen"
+  | "water_access"
+  | "chva_facilities"
+  | null;
 
 export function useMapbox() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -54,6 +61,13 @@ export function useMapbox() {
           "water-access-fill-layer",
           "visibility",
           activeLayer === "water_access" ? "visible" : "none"
+        );
+      }
+      if (mapboxMap.getLayer("chva-facilities-layer")) {
+        mapboxMap.setLayoutProperty(
+          "chva-facilities-layer",
+          "visibility",
+          activeLayer === "chva_facilities" ? "visible" : "none"
         );
       }
     };
@@ -111,6 +125,68 @@ export function useMapbox() {
           },
         });
 
+        // 6. Fiji Climate and Health Vulnerability Assessment facilities.
+        map.addSource("chva-facilities", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+          promoteId: "facility_id",
+        });
+
+        map.addLayer({
+          id: "chva-facilities-layer",
+          type: "circle",
+          source: "chva-facilities",
+          layout: {
+            visibility: "none",
+          },
+          paint: {
+            // Selected/hovered facilities grow and gain a dark ring so chart
+            // brushing is legible against the basemap.
+            // "zoom" may only feed a top-level interpolate, so the
+            // selection/hover branch lives inside each zoom stop.
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              4, ["case", ["boolean", ["feature-state", "hovered"], false], 6, ["boolean", ["feature-state", "highlighted"], false], 5, 3],
+              8, ["case", ["boolean", ["feature-state", "hovered"], false], 9, ["boolean", ["feature-state", "highlighted"], false], 8, 5],
+              11, ["case", ["boolean", ["feature-state", "hovered"], false], 12, ["boolean", ["feature-state", "highlighted"], false], 10, 7],
+            ],
+            "circle-color": [
+              "match",
+              ["get", "facility_type"],
+              "Hospital", "#dc2626",
+              "Health Centre", "#f97316",
+              "Nursing Station", "#2563eb",
+              "#64748b",
+            ],
+            "circle-opacity": [
+              "case",
+              ["boolean", ["feature-state", "highlighted"], false],
+              1,
+              ["boolean", ["feature-state", "hovered"], false],
+              1,
+              0.92,
+            ],
+            "circle-stroke-color": [
+              "case",
+              ["boolean", ["feature-state", "hovered"], false],
+              "#0a0a0a",
+              ["boolean", ["feature-state", "highlighted"], false],
+              "#0a0a0a",
+              "#ffffff",
+            ],
+            "circle-stroke-width": [
+              "case",
+              ["boolean", ["feature-state", "hovered"], false],
+              3,
+              ["boolean", ["feature-state", "highlighted"], false],
+              2.25,
+              1.25,
+            ],
+          },
+        });
+
         // 2. Load the wet bulb temperature GeoJSON (WBT)
         map.addSource("wet-bulb-temp", {
           type: "geojson",
@@ -143,6 +219,7 @@ export function useMapbox() {
         map.addSource("sea-level-h3", {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
+          promoteId: "h3_index",
         });
 
         map.addLayer({
@@ -252,10 +329,11 @@ export function useMapbox() {
 
     const loadDynamicLayers = async () => {
       try {
-        const [seaLevelRes, powerGenRes, waterAccessRes] = await Promise.all([
+        const [seaLevelRes, powerGenRes, waterAccessRes, chvaFacilitiesRes] = await Promise.all([
           apiFetch("/api/layers/sea_level").then((r) => r.json()),
           apiFetch("/api/layers/power_gen").then((r) => r.json()),
           apiFetch("/api/layers/water_access").then((r) => r.json()),
+          apiFetch("/api/layers/chva_facilities").then((r) => r.json()),
         ]);
 
         if (seaLevelRes.status === "available" || seaLevelRes.status === "stale") {
@@ -278,6 +356,13 @@ export function useMapbox() {
             source.setData(waterAccessRes.data);
           }
         }
+
+        if (chvaFacilitiesRes.status === "available") {
+          const source = mapboxMap.getSource("chva-facilities") as mapboxgl.GeoJSONSource;
+          if (source && chvaFacilitiesRes.data) {
+            source.setData(chvaFacilitiesRes.data);
+          }
+        }
       } catch (err) {
         console.error("Error loading dynamic map layers:", err);
       }
@@ -298,6 +383,7 @@ export function useMapbox() {
       sea_level: { sourceId: "sea-level-h3", endpoint: "/api/layers/sea_level" },
       power_gen: { sourceId: "power-gen-fill", endpoint: "/api/layers/power_gen" },
       water_access: { sourceId: "water-access-fill", endpoint: "/api/layers/water_access" },
+      chva_facilities: { sourceId: "chva-facilities", endpoint: "/api/layers/chva_facilities" },
     };
 
     const config = sourceMap[activeLayer as keyof typeof sourceMap];

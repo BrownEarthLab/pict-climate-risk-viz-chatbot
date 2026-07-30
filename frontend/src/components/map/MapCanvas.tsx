@@ -8,6 +8,7 @@ import MapControls from "./MapControls";
 import { StorytellerDeck } from "../story/StorytellerDeck";
 import { LinkedRiskCharts } from "./LinkedRiskCharts";
 import { useBrushingState } from "../../state/useBrushingState";
+import type { BrushRange } from "../../state/useBrushingState";
 import type {
   AdminAssetLookupRequestOptions,
   AssetHeatRiskRequestOptions,
@@ -116,7 +117,7 @@ interface AdminBoundaryConfig {
   apiPath: string;
 }
 
-type MapLayer = "tas" | "wet_bulb" | "manual_heat_risk" | "sea_level" | "power_gen" | "water_access" | null;
+type MapLayer = "tas" | "wet_bulb" | "manual_heat_risk" | "sea_level" | "power_gen" | "water_access" | "chva_facilities" | null;
 type HeatDisplayMode = "combined" | "risk" | "uncertainty";
 
 type BoundaryLoadStatus =
@@ -867,10 +868,56 @@ const MapCanvas = ({
     selectedIds,
     hoveredId,
     activeChapter,
+    brushRange,
     setSelectedIds,
     setHoveredId,
     setActiveChapter,
+    setBrushRange,
   } = useBrushingState();
+
+  const previousFeatureStateRef = useRef<Set<string>>(new Set());
+  const previousHoveredIdRef = useRef<string | null>(null);
+  const lastMapHoverIdRef = useRef<string | null>(null);
+
+  // Must be referentially stable: StorytellerDeck lists this in an effect's
+  // dependencies, and a fresh identity each render would re-apply the current
+  // chapter's preset — snapping activeLayer back the moment a user picks a
+  // layer by hand.
+  const applyStoryBrushRange = useCallback(
+    (range: BrushRange | null) => setBrushRange(range, "STORY"),
+    [setBrushRange],
+  );
+
+  useEffect(() => {
+    if (!mapboxMap) return;
+    const applyFeatureState = () => {
+      if (!mapboxMap.isStyleLoaded()) return;
+      const sourceIds = ["chva-facilities", "sea-level-h3"];
+      const nextIds = new Set(selectedIds);
+      const staleIds = new Set(previousFeatureStateRef.current);
+      staleIds.forEach((id) => {
+        if (!nextIds.has(id)) sourceIds.forEach((source) => {
+          try { mapboxMap.removeFeatureState({ source, id }); } catch { /* source may not contain this ID */ }
+        });
+      });
+      if (previousHoveredIdRef.current && previousHoveredIdRef.current !== hoveredId) {
+        sourceIds.forEach((source) => {
+          try { mapboxMap.removeFeatureState({ source, id: previousHoveredIdRef.current! }, "hovered"); } catch { /* source may not contain this ID */ }
+        });
+      }
+      nextIds.forEach((id) => sourceIds.forEach((source) => {
+        try { mapboxMap.setFeatureState({ source, id }, { highlighted: true }); } catch { /* ignore missing source IDs */ }
+      }));
+      if (hoveredId) sourceIds.forEach((source) => {
+        try { mapboxMap.setFeatureState({ source, id: hoveredId }, { hovered: true }); } catch { /* ignore missing source IDs */ }
+      });
+      previousFeatureStateRef.current = nextIds;
+      previousHoveredIdRef.current = hoveredId;
+    };
+    if (mapboxMap.isStyleLoaded()) applyFeatureState();
+    else mapboxMap.once("idle", applyFeatureState);
+    return () => mapboxMap.off("idle", applyFeatureState);
+  }, [hoveredId, mapboxMap, selectedIds]);
 
   const initialAnalysisSettings = useMemo(loadAnalysisSettings, []);
 
@@ -1544,15 +1591,15 @@ const MapCanvas = ({
     const waitForMapStyle = async () => {
       setBoundaryLoad({
         status: "waiting_for_map",
-        message: "Waiting for Mapbox style to finish loading...",
+        message: "Loading map boundaries...",
         percent: 8,
       });
 
-      for (let attempt = 0; attempt < 80; attempt += 1) {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
         if (cancelled) return false;
 
         try {
-          if (mapboxMap.loaded() || mapboxMap.isStyleLoaded()) {
+          if (mapboxMap.isStyleLoaded() || mapboxMap.loaded() || Boolean(mapboxMap.getStyle())) {
             return true;
           }
         } catch {
@@ -1562,7 +1609,7 @@ const MapCanvas = ({
         await sleep(100);
       }
 
-      return false;
+      return true;
     };
 
     const loadAdminBoundaries = async () => {
@@ -1669,6 +1716,7 @@ const MapCanvas = ({
       "sea-level-h3-layer",
       "power-gen-fill-layer",
       "water-access-fill-layer",
+      "chva-facilities-layer",
     ];
 
     const handleMouseMove = (e: mapboxgl.MapMouseEvent) => {
@@ -1682,6 +1730,11 @@ const MapCanvas = ({
         if (features.length > 0) {
           const feature = features[0];
           const props = feature.properties || {};
+          const featureId = String(props.facility_id || props.h3_index || feature.id || "");
+          if (featureId && featureId !== lastMapHoverIdRef.current) {
+            lastMapHoverIdRef.current = featureId;
+            setHoveredId(featureId, "MAP");
+          }
           const indicatorValue = props.indicator_value;
           let tooltipContent = `<strong>${props.name || props.geo_pict || "Unknown"}</strong>`;
 
@@ -1691,6 +1744,9 @@ const MapCanvas = ({
             else if (layerId === "water-access-fill-layer") unit = "%";
             else if (layerId === "power-gen-fill-layer") unit = " GWh";
             tooltipContent += `<br/>Value: ${Number(indicatorValue).toFixed(3)}${unit}`;
+          }
+          if (layerId === "chva-facilities-layer") {
+            tooltipContent = `<strong>${props.facility_name || "CHVA facility"}</strong><br/>Type: ${props.facility_type || "Unknown"}<br/>Vulnerability: ${props.vulnerability || "Unknown"}<br/><span style="font-size:10px;color:#888;">Source: Fiji CHVA Healthcare Assessment</span>`;
           }
           tooltipContent += `<br/><span style="font-size:10px;color:#888;">${props.layer_name || layerId}</span>`;
 
@@ -1717,6 +1773,13 @@ const MapCanvas = ({
         hoverPopupRef.current.remove();
         hoverPopupRef.current = null;
       }
+      // Only dispatch the clear once per hover-exit — mousemove fires on every
+      // pixel of pointer travel and would otherwise re-render the linked charts
+      // continuously while panning over empty ocean.
+      if (lastMapHoverIdRef.current !== null) {
+        lastMapHoverIdRef.current = null;
+        setHoveredId(null, "MAP");
+      }
     };
 
     mapboxMap.on("mousemove", handleMouseMove);
@@ -1727,7 +1790,22 @@ const MapCanvas = ({
         hoverPopupRef.current = null;
       }
     };
-  }, [mapboxMap]);
+  }, [mapboxMap, setHoveredId]);
+
+  useEffect(() => {
+    if (!mapboxMap) return;
+    const layerIds = ["sea-level-h3-layer", "chva-facilities-layer"];
+    const handleClick = (event: mapboxgl.MapMouseEvent) => {
+      const features = mapboxMap.queryRenderedFeatures(event.point, { layers: layerIds.filter((id) => mapboxMap.getLayer(id)) });
+      const feature = features[0];
+      if (!feature) return;
+      const properties = feature.properties || {};
+      const id = String(properties.facility_id || properties.h3_index || feature.id || "");
+      if (id) setSelectedIds(new Set([id]), "MAP");
+    };
+    mapboxMap.on("click", handleClick);
+    return () => mapboxMap.off("click", handleClick);
+  }, [mapboxMap, setSelectedIds]);
 
   // workflow-complete flyTo listener (forward-compat with visual-workflow-programmer)
   useEffect(() => {
@@ -1904,14 +1982,14 @@ const MapCanvas = ({
               onSelectChapter={setActiveChapter}
               mapboxMap={mapboxMap}
               setActiveLayer={setActiveLayer}
+              setBrushRange={applyStoryBrushRange}
+              setH3Resolution={setH3Resolution}
             />
           </div>
 
-          <div className="absolute bottom-16 left-4 top-6 z-20 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur-md">
-            <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                Analysis controls
-              </span>
+          <div className={`absolute left-4 z-20 flex flex-col overflow-hidden rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur-md transition-[width,height,top] duration-200 ${isLegendExpanded ? "bottom-16 top-6 w-[300px]" : "bottom-16 h-10 w-10"}`}>
+            <div className={`flex items-center border-b border-neutral-100 ${isLegendExpanded ? "justify-between px-4 py-3" : "h-full justify-center"}`}>
+              {isLegendExpanded && <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Analysis controls</span>}
 
               <button
                 onClick={() => setIsLegendExpanded(!isLegendExpanded)}
@@ -2486,121 +2564,143 @@ const MapCanvas = ({
                         />
                       </label>
                     </div>
-
-                    {/* Dynamic Datasets section */}
-                    <div className="mt-3 border-t border-neutral-100 pt-3">
-                      <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                        Dynamic Datasets
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => toggleLayer("sea_level", false)}
-                          className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            activeLayer === "sea_level" && !showGlobalDataset
-                              ? "bg-white shadow-sm text-neutral-950 font-bold"
-                              : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
-                          }`}
-                        >
-                          Sea Level Rise (H3)
-                        </button>
-                        <button
-                          onClick={() => toggleLayer("power_gen", false)}
-                          className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            activeLayer === "power_gen" && !showGlobalDataset
-                              ? "bg-white shadow-sm text-neutral-950 font-bold"
-                              : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
-                          }`}
-                        >
-                          Power Gen (GWh)
-                        </button>
-                        <button
-                          onClick={() => toggleLayer("water_access", false)}
-                          className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            activeLayer === "water_access" && !showGlobalDataset
-                              ? "bg-white shadow-sm text-neutral-950 font-bold"
-                              : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
-                          }`}
-                        >
-                          Water Access
-                        </button>
-                      </div>
-
-                      {/* Legend blocks for active dynamic layers */}
-                      {activeLayer === "sea_level" && (
-                        <div className="mt-3 border-t border-neutral-100 pt-3">
-                          <div className="mb-2 text-xs font-bold text-neutral-800">
-                            Sea Level Anomaly
-                          </div>
-                          <div className="mb-1 text-[10px] text-neutral-400">
-                            Meters (m)
-                          </div>
-                          <div
-                            className="h-2 w-full rounded-full"
-                            style={{
-                              background: "linear-gradient(to right, #f0f9ff, #38bdf8, #075985)",
-                            }}
-                          />
-                          <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
-                            <span>Low</span>
-                            <span>Moderate</span>
-                            <span>High</span>
-                          </div>
-                        </div>
-                      )}
-                      {activeLayer === "power_gen" && (
-                        <div className="mt-3 border-t border-neutral-100 pt-3">
-                          <div className="mb-2 text-xs font-bold text-neutral-800">
-                            Power Generation (GWh)
-                          </div>
-                          <div className="mb-1 text-[10px] text-neutral-400">
-                            Gigawatt-hours (GWh)
-                          </div>
-                          <div
-                            className="h-2 w-full rounded-full"
-                            style={{
-                              background: "linear-gradient(to right, #fff7ed, #fb923c, #7c2d12)",
-                            }}
-                          />
-                          <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
-                            <span>Low</span>
-                            <span>Medium</span>
-                            <span>High (GWh)</span>
-                          </div>
-                        </div>
-                      )}
-                      {activeLayer === "water_access" && (
-                        <div className="mt-3 border-t border-neutral-100 pt-3">
-                          <div className="mb-2 text-xs font-bold text-neutral-800">
-                            Safe Water Access
-                          </div>
-                          <div className="mb-1 text-[10px] text-neutral-400">
-                            Percentage (%)
-                          </div>
-                          <div
-                            className="h-2 w-full rounded-full"
-                            style={{
-                              background: "linear-gradient(to right, #fee2e2, #fbbf24, #22c55e)",
-                            }}
-                          />
-                          <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
-                            <span>0%</span>
-                            <span>50%</span>
-                            <span>100%</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Bi-directional D3 Linked Risk Charts */}
-                    <LinkedRiskCharts
-                      selectedIds={selectedIds}
-                      hoveredId={hoveredId}
-                      onSelectIds={setSelectedIds}
-                      onHoverId={setHoveredId}
-                      activeLayer={activeLayer}
-                    />
                   </div>
                 )}
+
+                {/* Dynamic Datasets section */}
+                <div className="mt-3 border-t border-neutral-100 pt-3">
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                    Dynamic Datasets
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => toggleLayer("sea_level", false)}
+                      className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        activeLayer === "sea_level" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                      }`}
+                    >
+                      Sea Level Rise (H3)
+                    </button>
+                    <button
+                      onClick={() => toggleLayer("power_gen", false)}
+                      className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        activeLayer === "power_gen" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                      }`}
+                    >
+                      Power Gen (GWh)
+                    </button>
+                    <button
+                      onClick={() => toggleLayer("water_access", false)}
+                      className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        activeLayer === "water_access" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                      }`}
+                    >
+                      Water Access
+                    </button>
+                    <button
+                      onClick={() => toggleLayer("chva_facilities", false)}
+                      className={`w-full text-left rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        activeLayer === "chva_facilities" && !showGlobalDataset
+                          ? "bg-white shadow-sm text-neutral-950 font-bold"
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                      }`}
+                    >
+                      Fiji CHVA Facilities
+                    </button>
+                  </div>
+
+                  {activeLayer === "chva_facilities" && (
+                    <div className="mt-3 border-t border-neutral-100 pt-3">
+                      <div className="mb-2 text-xs font-bold text-neutral-800">CHVA facility types</div>
+                      <div className="space-y-1 text-[10px] text-neutral-600">
+                        <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-red-600" />Hospital</div>
+                        <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-orange-500" />Health Centre</div>
+                        <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-blue-600" />Nursing Station</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Legend blocks for active dynamic layers */}
+                  {activeLayer === "sea_level" && (
+                    <div className="mt-3 border-t border-neutral-100 pt-3">
+                      <div className="mb-2 text-xs font-bold text-neutral-800">
+                        Sea Level Anomaly
+                      </div>
+                      <div className="mb-1 text-[10px] text-neutral-400">
+                        Meters (m)
+                      </div>
+                      <div
+                        className="h-2 w-full rounded-full"
+                        style={{
+                          background: "linear-gradient(to right, #f0f9ff, #38bdf8, #075985)",
+                        }}
+                      />
+                      <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                        <span>Low</span>
+                        <span>Moderate</span>
+                        <span>High</span>
+                      </div>
+                    </div>
+                  )}
+                  {activeLayer === "power_gen" && (
+                    <div className="mt-3 border-t border-neutral-100 pt-3">
+                      <div className="mb-2 text-xs font-bold text-neutral-800">
+                        Power Generation (GWh)
+                      </div>
+                      <div className="mb-1 text-[10px] text-neutral-400">
+                        Gigawatt-hours (GWh)
+                      </div>
+                      <div
+                        className="h-2 w-full rounded-full"
+                        style={{
+                          background: "linear-gradient(to right, #fff7ed, #fb923c, #7c2d12)",
+                        }}
+                      />
+                      <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                        <span>Low</span>
+                        <span>Medium</span>
+                        <span>High (GWh)</span>
+                      </div>
+                    </div>
+                  )}
+                  {activeLayer === "water_access" && (
+                    <div className="mt-3 border-t border-neutral-100 pt-3">
+                      <div className="mb-2 text-xs font-bold text-neutral-800">
+                        Safe Water Access
+                      </div>
+                      <div className="mb-1 text-[10px] text-neutral-400">
+                        Percentage (%)
+                      </div>
+                      <div
+                        className="h-2 w-full rounded-full"
+                        style={{
+                          background: "linear-gradient(to right, #fee2e2, #fbbf24, #22c55e)",
+                        }}
+                      />
+                      <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">
+                        <span>0%</span>
+                        <span>50%</span>
+                        <span>100%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bi-directional D3 Linked Risk Charts */}
+                <LinkedRiskCharts
+                  selectedIds={selectedIds}
+                  hoveredId={hoveredId}
+                  onSelectIds={setSelectedIds}
+                  onHoverId={setHoveredId}
+                  activeLayer={activeLayer}
+                  brushRange={brushRange}
+                />
               </div>
             )}
           </div>

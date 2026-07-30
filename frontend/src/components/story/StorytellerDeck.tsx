@@ -1,6 +1,7 @@
 import React from "react";
 import type mapboxgl from "mapbox-gl";
 import type { ClimateLayer } from "../../hooks/useMapbox";
+import type { BrushRange } from "../../state/useBrushingState";
 
 export interface StoryChapter {
   id: number;
@@ -14,6 +15,8 @@ export interface StoryChapter {
     zoom: number;
     pitch?: number;
     layer: ClimateLayer;
+    brushRange: BrushRange | null;
+    h3Resolution?: number;
   };
 }
 
@@ -31,6 +34,8 @@ export const STORY_CHAPTERS: StoryChapter[] = [
       zoom: 8.5,
       pitch: 30,
       layer: "tas",
+      brushRange: { tempMin: 35 },
+      h3Resolution: 7,
     },
   },
   {
@@ -45,7 +50,9 @@ export const STORY_CHAPTERS: StoryChapter[] = [
       center: [178.44, -18.14],
       zoom: 9.5,
       pitch: 20,
-      layer: "sea_level",
+      layer: "chva_facilities",
+      brushRange: { popMin: 70 },
+      h3Resolution: 7,
     },
   },
   {
@@ -61,6 +68,8 @@ export const STORY_CHAPTERS: StoryChapter[] = [
       zoom: 4.2,
       pitch: 0,
       layer: "water_access",
+      brushRange: null,
+      h3Resolution: 5,
     },
   },
   {
@@ -76,6 +85,8 @@ export const STORY_CHAPTERS: StoryChapter[] = [
       zoom: 6.5,
       pitch: 0,
       layer: null,
+      brushRange: null,
+      h3Resolution: 5,
     },
   },
 ];
@@ -85,6 +96,8 @@ interface StorytellerDeckProps {
   onSelectChapter: (chapterId: number) => void;
   mapboxMap: mapboxgl.Map | null;
   setActiveLayer: (layer: ClimateLayer) => void;
+  setBrushRange: (range: BrushRange | null) => void;
+  setH3Resolution: (resolution: number) => void;
 }
 
 export const StorytellerDeck: React.FC<StorytellerDeckProps> = ({
@@ -92,10 +105,22 @@ export const StorytellerDeck: React.FC<StorytellerDeckProps> = ({
   onSelectChapter,
   mapboxMap,
   setActiveLayer,
+  setBrushRange,
+  setH3Resolution,
 }) => {
-  const activeChapterData = STORY_CHAPTERS.find((c) => c.id === currentChapter) || STORY_CHAPTERS[0];
+  const [activeChapterId, setActiveChapterId] = React.useState(currentChapter || 1);
+  const activeChapterData = STORY_CHAPTERS.find((c) => c.id === activeChapterId) || STORY_CHAPTERS[0];
+
+  React.useEffect(() => {
+    const chapter = STORY_CHAPTERS.find((item) => item.id === activeChapterId);
+    if (!chapter) return;
+    setActiveLayer(chapter.mapPreset.layer);
+    setBrushRange(chapter.mapPreset.brushRange);
+    if (chapter.mapPreset.h3Resolution) setH3Resolution(chapter.mapPreset.h3Resolution);
+  }, [activeChapterId, setActiveLayer, setBrushRange, setH3Resolution]);
 
   const handleChapterClick = (chapterId: number) => {
+    setActiveChapterId(chapterId);
     onSelectChapter(chapterId);
     const chapter = STORY_CHAPTERS.find((c) => c.id === chapterId);
     if (chapter && mapboxMap) {
@@ -107,6 +132,7 @@ export const StorytellerDeck: React.FC<StorytellerDeckProps> = ({
         essential: true,
       });
       setActiveLayer(chapter.mapPreset.layer);
+      setBrushRange(chapter.mapPreset.brushRange);
     }
   };
 
@@ -115,7 +141,7 @@ export const StorytellerDeck: React.FC<StorytellerDeckProps> = ({
       {/* Chapter Tabs Header */}
       <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2 border-b border-neutral-100">
         {STORY_CHAPTERS.map((ch) => {
-          const isActive = ch.id === currentChapter;
+          const isActive = ch.id === activeChapterId;
           return (
             <button
               key={ch.id}
@@ -140,7 +166,7 @@ export const StorytellerDeck: React.FC<StorytellerDeckProps> = ({
               {activeChapterData.badge}
             </span>
             <span className="text-xs text-neutral-500 font-mono">
-              {currentChapter} / {STORY_CHAPTERS.length}
+              {activeChapterId} / {STORY_CHAPTERS.length}
             </span>
           </div>
           <h3 className="text-sm font-bold text-neutral-900">{activeChapterData.subtitle}</h3>
@@ -153,6 +179,10 @@ export const StorytellerDeck: React.FC<StorytellerDeckProps> = ({
         <div className="text-[10px] text-neutral-400 font-mono bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-200/60 shrink-0">
           🛡️ {activeChapterData.provenance}
         </div>
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button onClick={() => handleChapterClick(Math.min(STORY_CHAPTERS.length, activeChapterId + 1))} className="rounded-lg bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">Next Chapter</button>
+        <button onClick={() => { onSelectChapter(4); setActiveChapterId(4); setActiveLayer(null); setBrushRange(null); }} className="rounded-lg bg-neutral-100 px-3 py-1.5 text-[11px] font-semibold text-neutral-700">Explore Freely</button>
       </div>
     </div>
   );
