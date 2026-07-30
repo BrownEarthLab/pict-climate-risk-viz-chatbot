@@ -175,9 +175,21 @@ not exist.
 
 **Three findings that constrain scope:**
 
-1. **There is no population data in the repo.** Not in `data/`, not in the catalogs, not
-   as a property on any reference geometry. The note "with population data" requires an
-   acquisition step (PDH has population indicators — an SDMX flow addition).
+1. **Population data exists, at country level only.** *(Corrected 2026-07-30 — an earlier
+   revision of this document claimed there was none. That was wrong; the first check
+   looked at the catalogs and the derived geometries but not the raw Natural Earth
+   source.)* `data/reference/_ne_10m_admin_0_map_units.geojson` carries `POP_EST`,
+   `POP_RANK` and `POP_YEAR` — **30 features in the Melanesia / Polynesia / Micronesia
+   subregions**, 2019 estimates, joinable to `pict_regions.geojson` on ISO3.
+
+   Three caveats that still constrain use: it is **country-level only**, so no
+   sub-national population encoding is possible; it is a **Natural Earth estimate, not an
+   official SPC/PDH figure**, which sits awkwardly with the project's provenance
+   discipline (PDH has population indicators via SDMX if an official source is needed);
+   and it is a **single year**, so no population time series. Note also that the derived
+   `pict_regions.geojson` **dropped** these fields, so carrying them across needs a
+   pipeline step, and a few entries (Papua New Guinea, Bougainville) have `ISO_A3 = -99`
+   and need name-based joins.
 2. **The heat layer is a single period** (2050s, SSP2-4.5, one model, ACCESS-CM2). It is
    a projection, not a time series. **No space-time cube can be built from it**, which
    independently confirms Direction A cannot start until many more years are pulled
@@ -192,6 +204,7 @@ not exist.
 | Sequential–sequential | extreme heat days × model uncertainty (`_max − _min`) | Fiji, 102 cells | ✅ |
 | Diverging–diverging (center = norm) | sea level **anomaly** (diverges around 0) × indicator deviation from regional median | PICT, 26 | ✅ |
 | Qualitative–sequential | `region_group` (Melanesia / Polynesia / Micronesia) × any indicator | PICT, 26 | ✅ |
+| Sequential–sequential (alt) | any SDMX indicator × **population** (`POP_EST`, Natural Earth 2019) | PICT, country | ✅ needs an ISO3 join step |
 | Qualitative–sequential (alt) | CHVA facility type × heat exposure | Fiji | ⚠️ needs `5cd3c20` cherry-pick |
 
 The sequential–sequential pair is the one v1 already prototyped as "Heat Hazard ×
