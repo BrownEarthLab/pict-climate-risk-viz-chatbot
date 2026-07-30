@@ -23,37 +23,37 @@ export function useMapbox() {
         mapboxMap.setLayoutProperty(
           "climate-temp-layer",
           "visibility",
-          activeLayer === "tas" && showGlobalDataset ? "visible" : "none"
+          activeLayer === "tas" ? "visible" : "none"
         );
       }
       if (mapboxMap.getLayer("wet-bulb-temp-layer")) {
         mapboxMap.setLayoutProperty(
           "wet-bulb-temp-layer",
           "visibility",
-          activeLayer === "wet_bulb" && showGlobalDataset ? "visible" : "none"
+          activeLayer === "wet_bulb" ? "visible" : "none"
         );
       }
 
-      // Dynamic layers (visible only when active and global dataset not shown)
+      // Dynamic layers
       if (mapboxMap.getLayer("sea-level-h3-layer")) {
         mapboxMap.setLayoutProperty(
           "sea-level-h3-layer",
           "visibility",
-          activeLayer === "sea_level" && !showGlobalDataset ? "visible" : "none"
+          activeLayer === "sea_level" ? "visible" : "none"
         );
       }
       if (mapboxMap.getLayer("power-gen-fill-layer")) {
         mapboxMap.setLayoutProperty(
           "power-gen-fill-layer",
           "visibility",
-          activeLayer === "power_gen" && !showGlobalDataset ? "visible" : "none"
+          activeLayer === "power_gen" ? "visible" : "none"
         );
       }
       if (mapboxMap.getLayer("water-access-fill-layer")) {
         mapboxMap.setLayoutProperty(
           "water-access-fill-layer",
           "visibility",
-          activeLayer === "water_access" && !showGlobalDataset ? "visible" : "none"
+          activeLayer === "water_access" ? "visible" : "none"
         );
       }
     };
@@ -78,6 +78,8 @@ export function useMapbox() {
         zoom: MAPBOX_DEFAULTS.zoom,
         projection: MAPBOX_DEFAULTS.projection,
       });
+
+      setMapboxMap(map);
 
       map.on("load", () => {
         map.setFog(MAPBOX_DEFAULTS.fog);
