@@ -3,10 +3,9 @@
  *
  * Generates H3 hexagon grids over country/atoll polygons.
  *
- * - Resolution 4 by default (~1,200 km² cells)
- * - Falls back to Resolution 5 for atolls and small islands
- *   (Tuvalu, Nauru, Kiribati) whose bounding box is smaller
- *   than a single Resolution 4 cell.
+ * - Resolution 7 for the interactive map (~5 km² cells)
+ * - Cells whose H3 centroid falls outside the source land polygon are
+ *   discarded so coastal/intersecting cells do not render over water.
  *
  * Each output feature is a polygon (H3 cell boundary) enriched
  * with the original region properties and the H3 index.
@@ -14,9 +13,10 @@
 
 import { polygonToCells, cellToBoundary, cellToLatLng, latLngToCell } from "h3-js";
 
-// Resolutions
-const RES_4 = 4;
-const RES_5 = 5;
+// The interactive map uses one detailed resolution for consistent brushing.
+const MAP_RESOLUTION = 7;
+const RES_4 = MAP_RESOLUTION;
+const RES_5 = MAP_RESOLUTION;
 
 // Countries / atolls that require Resolution-5 fallback
 const SMALL_ATOLL_ISO3 = new Set(["TUV", "NRU", "KIR"]);
@@ -79,29 +79,44 @@ function computeBbox(geometry) {
  * @returns {number} H3 resolution (4 or 5)
  */
 function resolveResolution(feature) {
-  const props = feature.properties || {};
+  return MAP_RESOLUTION;
+}
 
-  // For known small atolls, use Res 5 directly
-  if (props.iso3 && SMALL_ATOLL_ISO3.has(props.iso3)) {
-    return RES_5;
+function pointInRing(point, ring) {
+  const [pointLng, pointLat] = point;
+  if (!Array.isArray(ring) || ring.length < 3) return false;
+
+  // Shift each ring longitude near the point so antimeridian-crossing
+  // polygons can be tested without treating Fiji as spanning the globe.
+  const anchorLng = Number(ring[0][0]);
+  const shiftedPointLng = anchorLng + ((((pointLng - anchorLng) + 540) % 360) - 180);
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const current = ring[index];
+    const prior = ring[previous];
+    const currentLng = anchorLng + ((((Number(current[0]) - anchorLng) + 540) % 360) - 180);
+    const priorLng = anchorLng + ((((Number(prior[0]) - anchorLng) + 540) % 360) - 180);
+    const intersects = (Number(current[1]) > pointLat) !== (Number(prior[1]) > pointLat)
+      && shiftedPointLng < ((priorLng - currentLng) * (pointLat - Number(current[1])))
+        / (Number(prior[1]) - Number(current[1])) + currentLng;
+    if (intersects) inside = !inside;
   }
+  return inside;
+}
 
-  // Otherwise, check bounding box area
-  try {
-    const featureBbox = computeBbox(feature.geometry);
-    const areaKm2 = bboxAreaKm2(featureBbox);
-
-    // Approximate area of a Res 4 hexagon is ~1,200 km².
-    // If the region's bounding box fits within a single Res 4 cell,
-    // fall back to Res 5.
-    if (areaKm2 < 1200) {
-      return RES_5;
-    }
-  } catch {
-    // If bounding box computation fails, default to Res 4
+function pointInGeometry(point, geometry) {
+  if (!geometry) return false;
+  if (geometry.type === "Polygon") {
+    const [outerRing, ...holes] = geometry.coordinates || [];
+    return pointInRing(point, outerRing) && !holes.some((hole) => pointInRing(point, hole));
   }
-
-  return RES_4;
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || []).some((polygon) => pointInGeometry(point, {
+      type: "Polygon",
+      coordinates: polygon,
+    }));
+  }
+  return false;
 }
 
 /**
@@ -126,7 +141,7 @@ function getPolygonCentroid(polygonCoordinates) {
  * Get all H3 cell indices that intersect a given polygon feature.
  * Uses h3-js v4+ polygonToCells which expects GeoJSON polygon coordinates.
  * @param {Object} feature - GeoJSON Polygon/MultiPolygon feature
- * @param {number} resolution - H3 resolution (4 or 5)
+ * @param {number} resolution - H3 resolution (7 for map layers)
  * @returns {Array<string>} H3 cell indices
  */
 function getCellIndices(feature, resolution) {
@@ -220,7 +235,7 @@ function cellIndexToFeature(cellIndex, properties) {
  * Bin a GeoJSON FeatureCollection of region polygons into H3 cells.
  *
  * For each feature:
- *   - Determine resolution (Res 4 default, Res 5 for small atolls)
+ *   - Use resolution 7 for a consistent interactive map grid
  *   - Polyfill the polygon to get covering H3 cell indices
  *   - Convert each H3 cell to a GeoJSON polygon
  *   - Assign the region's indicator value to each cell
@@ -232,18 +247,15 @@ function binFeaturesToH3(enrichedFeatures) {
   const h3Cells = [];
 
   for (const feature of enrichedFeatures) {
-    let resolution = resolveResolution(feature);
+    const resolution = resolveResolution(feature);
     let cellIndices = getCellIndices(feature, resolution);
 
     // Some sub-atoll polygons (especially near the antimeridian) can yield
     // 0 cells at the chosen resolution even though the geometry is valid.
     // Step up the resolution until we get coverage (cap at Res 7).
-    while (cellIndices.length === 0 && resolution < 7) {
-      resolution += 1;
-      cellIndices = getCellIndices(feature, resolution);
-    }
-
     for (const cellIndex of cellIndices) {
+      const [centroidLat, centroidLng] = cellToLatLng(cellIndex);
+      if (!pointInGeometry([centroidLng, centroidLat], feature.geometry)) continue;
       const cellFeature = cellIndexToFeature(cellIndex, {
         ...feature.properties,
         h3_resolution: resolution,
@@ -266,4 +278,6 @@ export {
   SMALL_ATOLL_ISO3,
   RES_4,
   RES_5,
+  MAP_RESOLUTION,
+  pointInGeometry,
 };
