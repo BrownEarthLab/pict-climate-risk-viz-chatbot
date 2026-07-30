@@ -136,6 +136,107 @@ function startServer() {
   });
 }
 
+const CHVA_FACILITIES_PATHS = [
+  process.env.CHVA_FACILITIES_PATH,
+  path.resolve(__dirname, "../data/layers/CHVADataSeperatedCoordinatesFile.csv"),
+  path.resolve(__dirname, "../data/infrastructure/fiji_chva_facilities.csv"),
+  // Development fallback for the source dataset that this project reuses.
+  path.resolve(__dirname, "../../earthlab-fiji-map/data/infrastructure/fiji_chva_facilities.csv"),
+].filter(Boolean);
+
+function getChvaFacilityType(name) {
+  const normalizedName = String(name || "").toLowerCase();
+  if (normalizedName.includes("hospital")) return "Hospital";
+  if (normalizedName.includes("health centre") || normalizedName.includes("health center")) {
+    return "Health Centre";
+  }
+  return "Nursing Station";
+}
+
+function parseCsvRecords(csv) {
+  const records = [];
+  let record = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const character = csv[index];
+
+    if (character === '"') {
+      if (inQuotes && csv[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (character === "," && !inQuotes) {
+      record.push(field);
+      field = "";
+    } else if ((character === "\n" || character === "\r") && !inQuotes) {
+      if (character === "\r" && csv[index + 1] === "\n") index += 1;
+      record.push(field);
+      if (record.some((value) => value.length > 0)) records.push(record);
+      record = [];
+      field = "";
+    } else {
+      field += character;
+    }
+  }
+
+  record.push(field);
+  if (record.some((value) => value.length > 0)) records.push(record);
+  return records;
+}
+
+function loadChvaFacilities() {
+  const csvPath = CHVA_FACILITIES_PATHS.find((candidate) => fs.existsSync(candidate));
+
+  if (!csvPath) {
+    throw new Error(
+      "CHVA facility CSV not found. Set CHVA_FACILITIES_PATH or add data/infrastructure/fiji_chva_facilities.csv."
+    );
+  }
+
+  const records = parseCsvRecords(fs.readFileSync(csvPath, "utf8"));
+  const headers = records.shift() || [];
+  const nameIndex = headers.indexOf("HealthCareFacility");
+  const latitudeIndex = headers.indexOf("Latitude");
+  const longitudeIndex = headers.indexOf("Longitude");
+  const subdivisionIndex = headers.indexOf("MedicalSubdivision");
+  const vulnerabilityIndex = headers.indexOf("RAPID_CHVA_Vulnerability");
+  const vulnerabilityNumericIndex = headers.indexOf("RAPID_CHVA_Vulnerability_Numeric");
+
+  if ([nameIndex, latitudeIndex, longitudeIndex].some((index) => index < 0)) {
+    throw new Error("CHVA facility CSV is missing required name or coordinate columns.");
+  }
+
+  const features = records.flatMap((columns, index) => {
+    const latitude = Number(columns[latitudeIndex]);
+    const longitude = Number(columns[longitudeIndex]);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+
+    const name = columns[nameIndex]?.trim();
+    return [{
+      type: "Feature",
+      id: `chva-${index + 1}`,
+      geometry: { type: "Point", coordinates: [longitude, latitude] },
+      properties: {
+        facility_id: `chva-${index + 1}`,
+        facility_name: name,
+        facility_type: getChvaFacilityType(name),
+        medical_subdivision: columns[subdivisionIndex]?.trim() || null,
+        vulnerability: columns[vulnerabilityIndex]?.trim() || "Unknown",
+        vulnerability_numeric: Number(columns[vulnerabilityNumericIndex]) || 0,
+        layer_name: "Fiji CHVA Facilities",
+        description: "Fiji Climate and Health Vulnerability Assessment facility.",
+      },
+    }];
+  });
+
+  return { type: "FeatureCollection", features };
+}
+
 const MANUAL_HEAT_RISK_LAYER = "Manual Heat Risk";
 const MANUAL_HEAT_RISK_ASSET_LAYER = "Manual Heat Risk Assets";
 const POPULATION_EXPOSURE_OVERLAY_LAYER = "Population Exposure Overlay";
@@ -4785,6 +4886,20 @@ app.post("/api/spatial-query", async (req, res) => {
 // GET /api/layers/:layer — serve dynamic layer data
 app.get("/api/layers/:layer", async (req, res) => {
   const { layer } = req.params;
+
+  if (layer === "chva_facilities") {
+    try {
+      const data = loadChvaFacilities();
+      return res.json({ layer, status: "available", data });
+    } catch (error) {
+      return res.status(503).json({
+        layer,
+        status: "unavailable",
+        data: null,
+        error: error.message,
+      });
+    }
+  }
 
   if (!["sea_level", "power_gen", "water_access"].includes(layer)) {
     return res.status(400).json({ error: `Unknown layer: ${layer}` });

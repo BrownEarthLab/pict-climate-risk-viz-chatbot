@@ -1,8 +1,4 @@
-"""
-Test the H3 Resolution 4/5 fallback logic.
-Verifies that Resolution 4 is used for standard regions,
-and Resolution 5 is used as fallback for small atolls.
-"""
+"""Verify that the sea-level H3 layer uses the detailed map resolution."""
 
 import pytest
 import requests
@@ -28,11 +24,9 @@ def test_sea_level_layer_h3_structure():
         props = feat.get("properties", {})
         assert "h3_index" in props, "Each H3 feature must have an h3_index"
         assert "h3_resolution" in props, "Each H3 feature must have an h3_resolution"
-        # Resolution should be 4 or 5
-        assert props["h3_resolution"] in (
-            4,
-            5,
-        ), f"Expected H3 resolution 4 or 5, got {props['h3_resolution']}"
+        assert props["h3_resolution"] == 7, (
+            f"Expected H3 resolution 7, got {props['h3_resolution']}"
+        )
         # Geometry should be Polygon
         assert feat["geometry"]["type"] == "Polygon"
 
