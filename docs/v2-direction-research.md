@@ -201,14 +201,28 @@ not exist.
 
 | Variant | Pair | Scale | On disk? |
 | :--- | :--- | :--- | :--- |
-| Sequential–sequential | extreme heat days × model uncertainty (`_max − _min`) | Fiji, 102 cells | ✅ |
+| Sequential–sequential | extreme heat days × **inter-annual variability** (`_max − _min`) | Fiji, 102 cells | ✅ |
 | Diverging–diverging (center = norm) | sea level **anomaly** (diverges around 0) × indicator deviation from regional median | PICT, 26 | ✅ |
 | Qualitative–sequential | `region_group` (Melanesia / Polynesia / Micronesia) × any indicator | PICT, 26 | ✅ |
 | Sequential–sequential (alt) | any SDMX indicator × **population** (`POP_EST`, Natural Earth 2019) | PICT, country | ✅ needs an ISO3 join step |
 | Qualitative–sequential (alt) | CHVA facility type × heat exposure | Fiji | ⚠️ needs `5cd3c20` cherry-pick |
 
-The sequential–sequential pair is the one v1 already prototyped as "Heat Hazard ×
-Climate Uncertainty," so it also carries forward the uncertainty thread from Direction C.
+> **What `_min` / `_max` actually mean.** Verified in
+> `backend/scripts/build_climate_layer_from_nex.py:288-296`: the script groups rows by
+> `(lat, lon)` and aggregates `min` / `max` **across years**, with
+> `model_year_count = nunique(year)`. The layer holds **one model** (ACCESS-CM2,
+> r1i1p1f1). So the spread is **inter-annual variability across 2041–2060 for a single
+> model** — how much heat swings from year to year — and **not** model-ensemble
+> uncertainty, which would require several CMIP6 models.
+>
+> This is a legitimate and arguably more decision-relevant axis for a health-exposure
+> story (a place with volatile years is harder to adapt to than a uniformly hot one), but
+> it must be **labelled correctly in the UI**. Earlier revisions of this document and of
+> `docs/presentation-script-and-cheat-sheet.md` call it "model uncertainty," which is
+> wrong. Genuine model uncertainty is tracked as a data gap.
+
+The sequential–sequential pair is the one v1 prototyped as "Heat Hazard × Climate
+Uncertainty" — under that same mislabel.
 
 ## 4. Recommendation
 
