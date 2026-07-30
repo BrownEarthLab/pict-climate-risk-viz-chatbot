@@ -125,9 +125,10 @@ three variants the notes name — standard sequential-sequential, **diverging-di
 with "the norm" at center**, and **qualitative-sequential** — and lets the reader
 compare them on the same data.
 
-- **Reuses:** existing climate layers + SDMX indicators (heat × water access, heat ×
-  power generation, heat × population), `aggregation.py`, the v1 bivariate palette work,
-  H3 binning.
+- **Reuses:** existing climate layers + SDMX indicators, `aggregation.py`, the v1
+  bivariate palette work, H3 binning. Verified available pairs are in §3a — note that
+  **population data is not in the repo**, so any population encoding requires
+  acquisition first.
 - **New work:** three legend components and their scales, the legend-as-brush
   interaction, scrollytelling scaffold.
 - **Biggest risk:** it is a *design* contribution more than an analytical one. Strong for
@@ -157,6 +158,44 @@ already defines). Brushing the distribution filters the map.
   the ensemble story needs data work.
 
 ---
+
+### 3a. What the data on disk actually supports (verified 2026-07-30)
+
+Checked directly, because §3 originally asserted a "heat × population" pair that does
+not exist.
+
+| Dataset | Units | Fields |
+| :--- | :--- | :--- |
+| `fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson` | **102** polygon cells | `extreme_heat_days_mean` / `_min` / `_max`, `mean_tasmax_c_mean`, `cell_id` |
+| `fiji_tikina.geojson` | **86** polygons | Province, Division, Tikina |
+| `fiji_admin_adm2.geojson` | **15** (provinces) | — |
+| `fiji_admin_adm1.geojson` | **4** (divisions) | — |
+| `pict_regions.geojson` | **26** | iso3, subregion, region_group, sovereignty |
+| SDMX cache | country level | sea level anomaly, power generation, safe water access |
+
+**Three findings that constrain scope:**
+
+1. **There is no population data in the repo.** Not in `data/`, not in the catalogs, not
+   as a property on any reference geometry. The note "with population data" requires an
+   acquisition step (PDH has population indicators — an SDMX flow addition).
+2. **The heat layer is a single period** (2050s, SSP2-4.5, one model, ACCESS-CM2). It is
+   a projection, not a time series. **No space-time cube can be built from it**, which
+   independently confirms Direction A cannot start until many more years are pulled
+   through `build_climate_layer_from_nex.py`.
+3. **The heat grid is Fiji-only and the SDMX indicators are country-level.** They do not
+   join at cell level. A bivariate map has to pick one of the two scales.
+
+**Bivariate pairs that are real today**, mapped to the three variants in the notes:
+
+| Variant | Pair | Scale | On disk? |
+| :--- | :--- | :--- | :--- |
+| Sequential–sequential | extreme heat days × model uncertainty (`_max − _min`) | Fiji, 102 cells | ✅ |
+| Diverging–diverging (center = norm) | sea level **anomaly** (diverges around 0) × indicator deviation from regional median | PICT, 26 | ✅ |
+| Qualitative–sequential | `region_group` (Melanesia / Polynesia / Micronesia) × any indicator | PICT, 26 | ✅ |
+| Qualitative–sequential (alt) | CHVA facility type × heat exposure | Fiji | ⚠️ needs `5cd3c20` cherry-pick |
+
+The sequential–sequential pair is the one v1 already prototyped as "Heat Hazard ×
+Climate Uncertainty," so it also carries forward the uncertainty thread from Direction C.
 
 ## 4. Recommendation
 
