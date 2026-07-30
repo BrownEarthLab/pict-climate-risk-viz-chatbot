@@ -85,4 +85,95 @@ test.describe("Storyteller Deck & Linked Brushing Visualization", () => {
     await page.getByRole("button", { name: "Explore Freely" }).click();
     await expect(page.getByText("CHVA facility types")).toBeHidden();
   });
+
+  test("chart brushing sets and clears Mapbox feature state", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".mapboxgl-canvas", { timeout: 20000 });
+    await page.getByRole("button", { name: "Fiji CHVA Facilities", exact: true }).click();
+    await expect.poll(async () => page.evaluate(() => Boolean(
+      (window as any).__map?.getSource("chva-facilities")
+    ))).toBe(true);
+    const chart = page.getByTestId("linked-histogram");
+    const brushOverlay = chart.locator("rect.overlay");
+    const box = await brushOverlay.boundingBox();
+    expect(box).not.toBeNull();
+
+    // Select the first chart point's temperature bin (chva-1: 31.5°C).
+    const x0 = (box?.x ?? 0) + 20;
+    const y0 = (box?.y ?? 0) + 5;
+    const x1 = (box?.x ?? 0) + 110;
+    const y1 = (box?.y ?? 0) + 45;
+    await page.mouse.move(x0, y0);
+    await page.mouse.down();
+    await page.mouse.move(x1, y1, { steps: 4 });
+    await page.mouse.up();
+    const brushDebug = await page.evaluate(() => ({
+      selection: document.querySelector('[data-testid="linked-histogram"] rect.selection')?.getAttribute("x"),
+      firstOpacity: document.querySelector('[data-testid="linked-scatterplot"] circle.dot')?.getAttribute("opacity"),
+    }));
+    console.log("brush debug", brushDebug);
+
+    await expect.poll(async () => page.evaluate(() => (
+      (window as any).__map?.getFeatureState({ source: "chva-facilities", id: "chva-1" })
+    ))).toMatchObject({ highlighted: true });
+
+    // Clicking outside the brush clears the selection and the GPU state.
+    await page.mouse.click((box?.x ?? 0) + 220, (box?.y ?? 0) + 90);
+    await expect.poll(async () => page.evaluate(() => (
+      (window as any).__map?.getFeatureState({ source: "chva-facilities", id: "chva-1" })
+    ))).not.toMatchObject({ highlighted: true });
+  });
+
+  test("map hover and click update the linked chart without feedback loops", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".mapboxgl-canvas", { timeout: 20000 });
+    await page.getByRole("button", { name: "Fiji CHVA Facilities", exact: true }).click();
+    await page.waitForTimeout(500);
+
+    await page.evaluate(() => {
+      const map = (window as any).__map;
+      if (!map) throw new Error("Mapbox debug handle was not exposed");
+      const originalSetFeatureState = map.setFeatureState.bind(map);
+      map.__setFeatureStateCalls = 0;
+      map.setFeatureState = (...args: any[]) => {
+        map.__setFeatureStateCalls += 1;
+        return originalSetFeatureState(...args);
+      };
+      map.queryRenderedFeatures = () => [{
+        id: "chva-1",
+        properties: {
+          facility_id: "chva-1",
+          facility_name: "Vunisea Subdivisional Hospital",
+          facility_type: "Hospital",
+          vulnerability: "High",
+        },
+      }];
+    });
+    const canvas = page.locator(".mapboxgl-canvas");
+    const canvasBox = await canvas.boundingBox();
+    await page.mouse.move((canvasBox?.x ?? 0) + 20, (canvasBox?.y ?? 0) + 20);
+
+    const firstDot = page.getByTestId("linked-scatterplot").locator("circle.dot").first();
+    await expect(firstDot).toHaveAttribute("stroke", "#0a0a0a");
+
+    await page.evaluate(() => {
+      const map = (window as any).__map;
+      map.queryRenderedFeatures = () => [];
+    });
+    await page.mouse.move((canvasBox?.x ?? 0) + 200, (canvasBox?.y ?? 0) + 160);
+    await expect(firstDot).toHaveAttribute("stroke", "none");
+
+    await page.evaluate(() => {
+      const map = (window as any).__map;
+      map.queryRenderedFeatures = () => [{
+        id: "chva-1",
+        properties: { facility_id: "chva-1" },
+      }];
+    });
+    await page.mouse.click((canvasBox?.x ?? 0) + 22, (canvasBox?.y ?? 0) + 22);
+    await expect(firstDot).toHaveAttribute("stroke", "#ffffff");
+    const callsAfterClick = await page.evaluate(() => (window as any).__map.__setFeatureStateCalls);
+    await page.waitForTimeout(300);
+    await expect.poll(async () => page.evaluate(() => (window as any).__map.__setFeatureStateCalls)).toBe(callsAfterClick);
+  });
 });

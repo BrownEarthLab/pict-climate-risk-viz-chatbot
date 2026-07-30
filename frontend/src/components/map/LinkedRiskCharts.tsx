@@ -227,11 +227,11 @@ export const LinkedRiskCharts: React.FC<LinkedRiskChartsProps> = ({
 
       {/* SVG Chart Container */}
       <div className="flex justify-center">
-        <svg ref={svgRef} width={340} height={180} className="overflow-visible" />
+        <svg ref={svgRef} data-testid="linked-scatterplot" width={340} height={180} className="overflow-visible" />
       </div>
       <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">Heat exposure distribution</div>
       <div className="flex justify-center">
-        <svg ref={histogramSvgRef} width={340} height={105} className="overflow-visible" />
+        <svg ref={histogramSvgRef} data-testid="linked-histogram" width={340} height={105} className="overflow-visible" />
       </div>
 
       {/* Optional Bivariate 3x3 Legend Matrix (from earthlab-fiji-map) */}

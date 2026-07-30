@@ -93,9 +93,21 @@ export function useMapbox() {
         projection: MAPBOX_DEFAULTS.projection,
       });
 
+      // Keep a diagnostic handle for browser regression tests and local map
+      // debugging. The public hook remains the application-facing API.
+      const debugWindow = window as Window & {
+        __map?: mapboxgl.Map;
+        __mapboxMap?: mapboxgl.Map;
+      };
+      debugWindow.__map = map;
+      debugWindow.__mapboxMap = map;
+
       setMapboxMap(map);
 
-      map.on("load", () => {
+      let layersInitialized = false;
+      const setupLayers = () => {
+        if (layersInitialized) return;
+        layersInitialized = true;
         map.setFog(MAPBOX_DEFAULTS.fog);
 
         // 1. Load the local NetCDF-converted temperature GeoJSON (TAS)
@@ -314,10 +326,20 @@ export function useMapbox() {
         });
 
         setMapboxMap(map);
-      });
+      };
+
+      // `load` waits for the style and initial tile set. A slow or blocked
+      // tile can therefore prevent custom sources/layers from ever being
+      // registered. `style.load` fires as soon as the style is parsed, which
+      // is the point at which sources and layers may safely be added.
+      if (map.isStyleLoaded()) setupLayers();
+      else map.once("style.load", setupLayers);
 
       return () => {
+        map.off("style.load", setupLayers);
         map.remove();
+        if (debugWindow.__map === map) debugWindow.__map = undefined;
+        if (debugWindow.__mapboxMap === map) debugWindow.__mapboxMap = undefined;
         setMapboxMap(null);
       };
     }
