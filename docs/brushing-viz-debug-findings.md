@@ -1,5 +1,12 @@
 # Handoff: Pacific Climate Brushing & Linking Viz — State of Work and Remaining Tasks
 
+> **⚠️ ARCHIVED 2026-07-30 — this change was superseded and never shipped.** Read
+> `docs/brushing-viz-retrospective.md` first; it is the judgement layer over this
+> document and states what is worth reusing. Two notes below were resolved after this
+> was written: the CHVA CSV is now tracked, and the `map.on("load")` failure diagnosed
+> in Part 5 was fixed by moving layer setup to `style.load` (`useMapbox.ts`). The work
+> order in Part 1 is no longer live.
+
 **Branch:** `feature/pacific-climate-brushing-viz`
 **Baseline before this work:** `042e5e5`
 **This work, committed:** `5cd3c20` (backend + data) → `164a59e` (frontend fixes) →
@@ -256,10 +263,9 @@ has never been measured at all.
   `5173` (`baseURL`), backend on `8000`, both `reuseExistingServer: true`. Do not start
   them manually. The endpoint test hardcodes `http://localhost:8000` because `baseURL` is
   the frontend — fine, but it is coupled to that config.
-- **`data/layers/CHVADataSeperatedCoordinatesFile.csv` is UNTRACKED.** The endpoint works
-  locally but returns 503 on a fresh clone or in CI, which will also fail the new endpoint
-  test. Either commit the CSV or document `CHVA_FACILITIES_PATH`. Resolution paths are in
-  `backend/server.js:140-146`.
+- ~~**`data/layers/CHVADataSeperatedCoordinatesFile.csv` is UNTRACKED.**~~ **Resolved.**
+  The CSV is now tracked, so the endpoint reproduces on a fresh clone. Resolution paths
+  are in `backend/server.js:140-146`.
 - **Pre-existing failures — not yours.** `e2e/spatial-query.spec.ts` has 2 failing tests
   (`activates draw mode…`, `spatial query flow…`), both timing out on
   `getByText("Draw for Spatial Query")`. **Confirmed pre-existing by stashing all
