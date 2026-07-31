@@ -1,7 +1,14 @@
 # Verification Record — Bivariate Scrollytelling Viz (2026-08-01)
 
-Branch: `feature/pacific-climate-viz-v2`. Working tree: includes the uncommitted
-implementation of this change. Each criterion names the command that settles it
+Branch: `feature/pacific-climate-viz-v2`. Committed as `bd0499b`.
+
+**Post-verification amendment (2026-07-31).** Four e2e failures were re-examined: the
+legacy analysis workspace moved to `/#workspace`, so those specs were failing on route
+rather than being obsolete. Retargeting fixed one. Final suite is **36 passed, 3 failed,
+1 skipped** — the three remaining are pre-existing legacy-workspace defects attributed in
+`tests.md` (two from `DrawControls` being imported nowhere; one is v1's Patch 1, fixed in
+`164a59e` on the archived branch and never carried across). The Python row below assumes a
+backend on `:8000`; without one, 11 integration tests fail with connection errors. Each criterion names the command that settles it
 (`tests.md` standing rule); a criterion not run is marked **unverified** — not
 complete.
 
