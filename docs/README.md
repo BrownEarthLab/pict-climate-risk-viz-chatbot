@@ -35,6 +35,11 @@ Read in this order:
    implementable; useful as a worked example of verifying a plan against the tree
 5. [brushing-viz-debug-findings.md](brushing-viz-debug-findings.md) — v1's line-by-line
    technical record
+6. [v2-bivariate-viz-verification.md](v2-bivariate-viz-verification.md) — per-criterion
+   verification record for the bivariate scrollytelling prototype (command + result for
+   every `tests.md` item; unverified items marked unverified)
+7. [v2-parallel-research.md](v2-parallel-research.md) — the not-blocking research that
+   decides what comes next: TB data, the student's EHSA notebook, multi-year heat layers
 
 ## Archived
 

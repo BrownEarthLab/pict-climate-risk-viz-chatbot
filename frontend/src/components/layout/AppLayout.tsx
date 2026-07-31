@@ -58,7 +58,7 @@ const AppLayout = ({
   const hasActiveChat =
     activeConversation !== null && activeConversation.messages.length > 0;
 
-  const sidebarMode: "active-chat" | "history" | "hidden" = hasActiveChat
+  const sidebarMode: "active-chat" | "history" = hasActiveChat
     ? "active-chat"
     : "history";
 
@@ -80,13 +80,7 @@ const AppLayout = ({
         />
       </main>
 
-      <aside
-        className={`h-full min-h-0 shrink-0 transition-all duration-300 ${
-          sidebarMode === "hidden"
-            ? "w-0 overflow-hidden opacity-0"
-            : "w-[320px] opacity-100"
-        }`}
-      >
+      <aside className={`h-full min-h-0 shrink-0 transition-all duration-300 w-[320px] opacity-100`}>
         {sidebarMode === "active-chat" && activeConversation ? (
           <div className="flex h-full flex-col overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">

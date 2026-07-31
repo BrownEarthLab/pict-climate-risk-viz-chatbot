@@ -1,3 +1,11 @@
+/**
+ * These tests target the legacy analysis workspace, which the bivariate
+ * scrollytelling change moved from "/" to "/#workspace" (see App.jsx). The root
+ * path now opens the splash view, which deliberately does NOT show the layer
+ * control surface — spec: scrollytelling-narrative-frame, "Opening Splash Screen
+ * Is Minimal". Retargeting the route is the correct fix; making the controls
+ * visible at "/" would violate that requirement.
+ */
 import { test, expect } from "@playwright/test";
 
 test.describe("Dynamic Map Layers", () => {
@@ -63,7 +71,7 @@ test.describe("Dynamic Map Layers", () => {
   });
 
   test("page loads with layer selector visible", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/#workspace");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
     // Dynamic Datasets section header
@@ -76,7 +84,7 @@ test.describe("Dynamic Map Layers", () => {
   });
 
   test("clicking Sea Level Rise layer button triggers layer toggle", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/#workspace");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
     await page.getByRole("button", { name: "Sea Level Rise (H3)", exact: true }).click();
@@ -86,7 +94,7 @@ test.describe("Dynamic Map Layers", () => {
   });
 
   test.skip("starter prompts include new dataset prompts (gh issue #3)", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/#workspace");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
     // Check for the new starter prompts

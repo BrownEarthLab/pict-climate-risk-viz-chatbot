@@ -19,6 +19,10 @@ const DrawControls = ({ map, onDrawGeometry }: DrawControlsProps) => {
     }
   }, [onDrawGeometry]);
 
+  const handleDrawDelete = useCallback(() => {
+    if (onDrawGeometry) onDrawGeometry(null);
+  }, [onDrawGeometry]);
+
   useEffect(() => {
     if (!map) return;
     if (drawMode && !draw.current) {
@@ -31,9 +35,7 @@ const DrawControls = ({ map, onDrawGeometry }: DrawControlsProps) => {
       map.addControl(draw.current, "top-left");
       map.on("draw.create", handleDrawChange);
       map.on("draw.update", handleDrawChange);
-      map.on("draw.delete", () => {
-        if (onDrawGeometry) onDrawGeometry(null);
-      });
+      map.on("draw.delete", handleDrawDelete);
     }
     return () => {
       delete (window as any).__mapboxDraw;
@@ -42,12 +44,12 @@ const DrawControls = ({ map, onDrawGeometry }: DrawControlsProps) => {
         map.removeControl(draw.current);
         map.off("draw.create", handleDrawChange);
         map.off("draw.update", handleDrawChange);
-        map.off("draw.delete");
+        map.off("draw.delete", handleDrawDelete);
         draw.current = null;
         if (onDrawGeometry && drawMode) onDrawGeometry(null);
       }
     };
-  }, [drawMode, map, handleDrawChange, onDrawGeometry]);
+  }, [drawMode, map, handleDrawChange, handleDrawDelete, onDrawGeometry]);
 
   return (
     <>

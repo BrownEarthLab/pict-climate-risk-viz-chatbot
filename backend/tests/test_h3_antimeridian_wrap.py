@@ -6,6 +6,9 @@ are wrapped cleanly relative to cell center longitude so polygons do not span ac
 
 import subprocess
 import json
+import pathlib
+
+BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 
 def test_h3_antimeridian_wrapping_js():
     """
@@ -31,7 +34,7 @@ def test_h3_antimeridian_wrapping_js():
     
     result = subprocess.run(
         ["node", "--input-type=module", "-e", js_code],
-        cwd="backend",
+        cwd=BACKEND_DIR,
         capture_output=True,
         text=True
     )

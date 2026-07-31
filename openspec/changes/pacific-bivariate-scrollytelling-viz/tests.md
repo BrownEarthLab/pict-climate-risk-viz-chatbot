@@ -90,9 +90,22 @@ about the map must query the map.
 
 ### Regression guards carried from v1
 
-- `npm run test:e2e -- e2e/spatial-query.spec.ts`: currently **2 pre-existing failures**
-  on the archived branch, caused by `DrawControls` being imported nowhere. Confirm status
-  on this branch and record it; do not report a pass that was never true.
+- **Three pre-existing failures in the legacy workspace, confirmed 2026-07-31.** All
+  three predate this change and none is caused by it. The legacy analysis workspace moved
+  from `/` to `/#workspace` (App.jsx hash route), so these specs were retargeted; that
+  fixed one of four, leaving:
+  - `e2e/spatial-query.spec.ts` × 2 — `DrawControls` is imported nowhere in
+    `frontend/src`, so "Draw for Spatial Query" never renders. Stranded by `04cd9f1`.
+  - `e2e/test_dynamic_map_layers.spec.ts` "clicking Sea Level Rise… triggers layer
+    toggle" — **v1's Patch 1, never carried to this branch.** `MapCanvas.tsx:2083` opens
+    `{currentActiveLayer === "manual_heat_risk" && (`, and the Dynamic Datasets section
+    (~2471) and Sea Level Anomaly legend (~2513) are nested inside it. Clicking a dynamic
+    layer sets `activeLayer` away from `manual_heat_risk`, unmounting the legend the click
+    should reveal. Fixed on the archived branch in `164a59e`; only `5cd3c20` (the backend
+    half) was cherry-picked here.
+
+  Do not report a pass that was never true. Fixing either is legacy-workspace work,
+  outside this change's scope.
 - Grep guard: `d3-selection` and `d3-brush` appear in neither `frontend/package.json` nor any
   import in `frontend/src`. Enforces Decision 1 mechanically rather than by convention.
 

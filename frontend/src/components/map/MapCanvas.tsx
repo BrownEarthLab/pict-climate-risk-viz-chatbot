@@ -825,7 +825,10 @@ function featureCollectionBounds(
   };
 
   collection.features.forEach((feature) => {
-    visit(feature.geometry?.coordinates);
+    const geometry = feature.geometry;
+    if (geometry && geometry.type !== "GeometryCollection") {
+      visit((geometry as GeoJSON.Geometry & { coordinates: unknown }).coordinates);
+    }
   });
 
   if (![west, south, east, north].every(Number.isFinite)) return null;

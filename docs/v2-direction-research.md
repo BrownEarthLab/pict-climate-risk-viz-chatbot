@@ -201,11 +201,25 @@ not exist.
 
 | Variant | Pair | Scale | On disk? |
 | :--- | :--- | :--- | :--- |
-| Sequential–sequential | extreme heat days × **inter-annual variability** (`_max − _min`) | Fiji, 102 cells | ✅ |
+| ~~Sequential–sequential~~ | ~~extreme heat days × inter-annual variability~~ | Fiji, 102 cells | ❌ **degenerate — see note** |
 | Diverging–diverging (center = norm) | sea level **anomaly** (diverges around 0) × indicator deviation from regional median | PICT, 26 | ✅ |
 | Qualitative–sequential | `region_group` (Melanesia / Polynesia / Micronesia) × any indicator | PICT, 26 | ✅ |
 | Sequential–sequential (alt) | any SDMX indicator × **population** (`POP_EST`, Natural Earth 2019) | PICT, country | ✅ needs an ISO3 join step |
 | Qualitative–sequential (alt) | CHVA facility type × heat exposure | Fiji | ⚠️ needs `5cd3c20` cherry-pick |
+
+> **⚠️ CORRECTION (2026-07-31): this pair is unusable — the layer is all zeros.**
+> Every one of the 102 cells has `extreme_heat_days_mean`, `_min` and `_max` equal to
+> **0**. Cause: `threshold_c` is **35.0 °C** while Fiji's `mean_tasmax_c` ranges
+> **24.30–28.79 °C**, so "days above 35 °C" is zero everywhere across all 20 years. The
+> threshold is calibrated for a continental climate; Fiji is tropical maritime, where the
+> extreme is humid heat — which is why `climate_indices.json` also defines
+> `wet_bulb_temperature` and `apparent_temperature`.
+>
+> An earlier revision of this table listed the pair as verified. It was not: the *fields*
+> were checked, the *values* were not. Any Fiji heat encoding needs either a
+> region-appropriate threshold or a wet-bulb/apparent-temperature metric — tracked in
+> issue #8. Note this also means the v1 presentation's slide-4 bivariate map was rendering
+> a constant.
 
 > **What `_min` / `_max` actually mean.** Verified in
 > `backend/scripts/build_climate_layer_from_nex.py:288-296`: the script groups rows by

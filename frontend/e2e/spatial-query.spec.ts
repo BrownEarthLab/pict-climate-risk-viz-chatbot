@@ -7,7 +7,7 @@ const TEST_POLYGON = {
 
 test.describe("Spatial Query End-to-End", () => {
   test("activates draw mode and shows instruction UI", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/#workspace");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
     await page.getByText("Draw for Spatial Query").dispatchEvent("click");
@@ -38,7 +38,7 @@ test.describe("Spatial Query End-to-End", () => {
   });
 
   test("spatial query flow: draw polygon and see confirmation in panel", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/#workspace");
     await page.waitForSelector(".mapboxgl-canvas", { timeout: 15000 });
 
     // Activate draw mode
