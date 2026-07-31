@@ -3,6 +3,13 @@
 Per `docs/brushing-viz-retrospective.md` §2.2, every criterion names the command that
 settles it, and a checkbox means that command ran and passed.
 
+**How these run** (architecture.md Decisions 6 and 7):
+`test:bundle-guard` and `test:fixtures` are node scripts under `frontend/scripts/`
+following `guard-d3.mjs` — exit code plus printed offenders, not `describe`/`it`. The
+workbench e2e specs run under the **existing** Playwright project and reach the workbench
+with `page.goto("/workbench.html")` on the current `baseURL`; no new server, port, or
+config block.
+
 The containment criteria are the ones that matter most here. A component that renders
 beautifully but whose fixtures can reach production is a failure of this change.
 
@@ -13,6 +20,14 @@ beautifully but whose fixtures can reach production is a failure of this change.
   - the workbench entry produces no artefact in the production build;
   - *edge case:* still passes when a component imported by both entries is present in the
     bundle — the guard targets fixture modules, not shared components.
+  - **negative control — the guard must be proven non-vacuous.** Temporarily import a
+    fixture from the application entry, build, and confirm `test:bundle-guard` **fails**.
+    Vite 8 minifies with Oxc by default, so a path-based scan can pass merely because the
+    string `src/fixtures/` did not survive mangling — indistinguishable from real
+    containment. If the control does not fail the guard, re-key it on a sentinel **string
+    literal** embedded in every fixture module (literals survive minification; identifiers
+    do not) and re-run the control until it fails. Revert the deliberate import afterwards.
+    A passing guard that has never been shown to fail is worth nothing here.
 - `npm run test:e2e -- e2e/workbench_containment.spec.ts`:
   - passing a dataset flagged `provenance: "fixture"` to the application entry raises an
     error rather than rendering;

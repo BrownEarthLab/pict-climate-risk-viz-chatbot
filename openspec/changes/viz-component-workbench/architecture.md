@@ -82,8 +82,8 @@ provenance check.
 
 ### Decision 1: A second Vite entry, not a route
 
-Add `frontend/workbench.html` as a second entry via `build.rollupOptions.input`, and exclude it
-from the production build.
+Add `frontend/workbench.html` as a second HTML entry, served in dev and **absent from the
+production build's entry list**.
 
 - **Rationale.** Isolation should be structural rather than conditional. A route inside
   the application means fixture modules are in the same module graph as production code
@@ -94,6 +94,60 @@ from the production build.
   flags get flipped, and the failure is silent.
 - **Alternative considered.** Storybook. Rejected: a substantial dependency and
   configuration surface for what is one HTML file and a list of components.
+
+**Mechanism, corrected for the installed Vite (verified 2026-07-31 — `research.md`):**
+
+The project runs **Vite 8.0.16, which bundles with Rolldown, not Rollup**. `build.rollupOptions`
+still exists but is typed as a **deprecated alias** for `build.rolldownOptions`. Use
+`build.rolldownOptions.input`; writing `rollupOptions` works today and carries a
+deprecation.
+
+The earlier phrasing — "configure `input` for both entries and exclude the workbench" —
+was self-contradictory: anything listed in `input` *is* built. The coherent form is:
+
+- **Production**: `build.rolldownOptions.input` names `index.html` **only**. The workbench
+  is excluded by never being an entry, which is what makes the containment structural
+  rather than a filter applied afterwards.
+- **Dev**: Vite's dev server transforms and serves any HTML file in the project root on
+  request, independently of the build entry list, so `/workbench.html` is reachable under
+  `npm run dev` with no build configuration at all. `dev:workbench` is therefore a
+  convenience that opens that path, **not** a second server.
+
+Task 2.2 confirms both halves against the real toolchain before any fixture is authored.
+If the dev-server half does not hold, the fallback is a second Vite config for the
+workbench — still no shared build input, so the containment argument is unchanged.
+
+### Decision 6: Guards are node scripts, not a new test runner
+
+`test:bundle-guard` and `test:fixtures` are plain node scripts under `frontend/scripts/`,
+wired into npm scripts, following `scripts/guard-d3.mjs`.
+
+- **Rationale.** The repo has Playwright for browser tests and two bespoke node guards
+  (`guard-d3.mjs`, `check-palettes.mjs`) and **no unit-test runner at all**. Both new
+  guards are file-walking and bundle-output-scanning — exactly the shape the existing
+  scripts already have. Adding vitest to host two non-browser assertions would introduce a
+  runner, a config, and a second testing idiom for no capability the repo lacks.
+- **Consequence.** These guards report by exit code and printed offenders, matching
+  `guard-d3.mjs`. They are not `describe`/`it` suites, and `tests.md` deliberately
+  specifies them as commands rather than test names.
+- **Revisit when** a third node guard appears, or when something genuinely needs
+  per-case reporting — at that point a runner starts paying for itself.
+
+### Decision 7: Workbench e2e runs against the existing dev server
+
+The three workbench specs run under the existing Playwright project, navigating to
+`/workbench.html` on the current `baseURL`.
+
+- **Rationale.** `playwright.config.js` already starts `npm run dev` on 5173 with
+  `baseURL: http://localhost:5173` and `reuseExistingServer: true`. Because Decision 1
+  makes the workbench a dev-server path rather than a separate server, the existing
+  `webServer` block covers it — no third server, no per-project `baseURL` override, no new
+  port.
+- **Consequence.** The specs use `page.goto("/workbench.html")` rather than `"/"`. That
+  one line is the entire integration.
+- **Note.** The config also starts the backend on 8000. The `tests.md` manual check "the
+  workbench renders with the backend stopped" is therefore genuinely manual — Playwright
+  will always have started it, so an automated run cannot make that claim.
 
 ### Decision 2: Provenance is a required field with no default
 
@@ -114,6 +168,15 @@ production bundle. Runtime: the application throws on `provenance: "fixture"`.
 - **Rationale.** The build guard catches accidental imports. The runtime check catches
   fixture data arriving through a path the build cannot see — a dev server, a paste, a
   future API. Neither alone is sufficient.
+- **The build guard must be proven non-vacuous.** Vite 8 minifies with **Oxc** by default
+  (`build.minify` defaults to `'oxc'`), so module paths and identifiers may not survive
+  into the output in any recognisable form. A guard that greps the bundle for
+  `src/fixtures/` can therefore pass because the string is absent *after mangling* rather
+  than because no fixture leaked — passing vacuously, in the one place this change cannot
+  afford it. The guard is only credible with a **negative control**: deliberately import a
+  fixture from the application entry, build, and assert the guard **fails**. If a
+  path-based scan cannot detect that, key the guard on a sentinel string inside each
+  fixture module that survives minification (a string literal, not an identifier).
 
 ### Decision 4: Generic labels for synthetic values; real geometry only where required
 
@@ -153,6 +216,12 @@ reimplement them.
   the spec forbids statistical computation outright and the test inspects for it. Once
   real analysis exists in the workbench, its output stops being obviously synthetic.
 
+- **[Risk] The bundle guard passes vacuously under Oxc minification**, reporting
+  containment it never actually tested. → *Mitigation:* the negative control in Decision 3
+  and task 1.1 — the guard must be shown to fail on a deliberately leaked fixture before
+  its passing is worth anything. This is the highest-consequence risk in the change,
+  because it fails silently and in the safe-looking direction.
+
 - **[Trade-off] Two entry points is slightly more build configuration.** Accepted; it is
   a handful of lines and it is what makes the containment structural.
 
@@ -165,9 +234,15 @@ reimplement them.
 1. **Should the workbench be deployable somewhere the PI can open it**, or is it
    local-dev only? A shared URL is more useful for review but widens the screenshot
    surface. Local-only is the safer default until the labelling rules have been exercised.
-2. **How many hotspot classes should the fixture exercise?** ESRI defines 16. The
-   rendering question is really "at what count does categorical colour stop being
-   readable" — so the fixture should probably span several counts rather than pick one.
+2. ~~**How many hotspot classes should the fixture exercise?**~~ **Resolved 2026-07-31:**
+   the fixture spans **3, 5, 8 and 16** classes, as `tests.md` and task 3.3 already
+   specify. 16 is the ESRI count; the others bracket the legibility threshold the manual
+   pass is looking for. Does not block implementation.
 3. **Does the rose chart belong in the final viz at all?** It is in the lab notes, but if
    issue #10 returns "national only", a rose chart of 26 countries × N years is a
    different and much weaker thing than one of Fiji provinces. Worth revisiting after #10.
+   Does not block **building** the component — only its eventual placement.
+
+**None of the remaining open questions block implementation.** Question 1 defaults to
+local-only, which is the safe direction and reversible; question 3 is downstream of issue
+#10 and concerns placement, not construction.

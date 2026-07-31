@@ -1,10 +1,12 @@
 # Research — Viz Component Workbench
 
 > **Written 2026-07-31**, after this change's `proposal` / `architecture` / `specs` /
-> `tests` but **before any implementation** (0 of 34 tasks). Unlike the sibling change's
-> research artifact, which is a true post-hoc back-fill, this one still precedes the build
-> and the findings below are meant to be acted on — three of them contradict statements
-> already in `architecture.md`. See **Superseded claims**.
+> `tests` but **before any implementation** (0 of 35 tasks). Unlike the sibling change's
+> research artifact, which is a true post-hoc back-fill, this one still precedes the build,
+> and its findings **have been fed back**: the claims under **Superseded claims** were
+> corrected in `architecture.md`, `tests.md`, `tasks.md` and the spec rather than left as a
+> note here. Later sections still carry live warnings — the Oxc/bundle-guard entry under
+> **Unverified assumptions** is the one that matters most.
 >
 > This change and `pacific-bivariate-scrollytelling-viz` rest on the same PI meeting and
 > largely the same external reading. Per the `tdd-rnd` rule that material spanning several
@@ -84,7 +86,7 @@ particular flips meaning between the two.
 | ⟳ `github.com/holtzy/D3-graph-gallery` | General D3 patterns | **MIT** — usable with attribution | 2026-07-30 |
 | ⟳ ESRI, *How Emerging Hot Spot Analysis works* | **16** categories, not the 3 the notes list. Supplies the exact strings the fixtures must avoid (`New Hot Spot`, `Persistent Hot Spot`, `Historical Hot Spot`, …) and the "at what count is categorical colour still readable" question the workbench exists to answer. | Vendor doc | 2026-07-30 |
 | Storybook | Considered as the isolation surface and rejected before reading deeply. Not evaluated in depth — the rejection is on dependency weight, not on capability. | — | 2026-07-31 |
-| Vite multi-entry (`build.rollupOptions.input`) | **Not consulted.** Decision 1 rests on this API; the installed major is Vite **8**, and the mechanism was assumed from prior versions rather than checked. Listed under Unverified assumptions, not here. | — | — |
+| Vite 8 build options — read from the installed package's own type declarations (`node_modules/vite/dist/node/index.d.ts`) rather than from the web | Vite 8 bundles with **Rolldown**; `build.rollupOptions` survives only as a **deprecated alias** for `build.rolldownOptions`; `input` remains the multi-entry mechanism; `build.minify` defaults to **`'oxc'`**. Decision 1 survives with a renamed key — but the Oxc default is what makes the bundle guard's negative control mandatory rather than optional. Reading the installed declarations is stronger evidence than documentation for a version this project may not be on. | Vendor source, read only | 2026-07-31 |
 | ⟳ `hnuradhyaksa.github.io/post/pacific-dataviz-2025` | **Fetch failed** — client-rendered SPA, returned the single word "Adhyaksa". Do not re-attempt without a headless browser. | — | 2026-07-30 |
 
 ## Candidate tech
@@ -97,7 +99,7 @@ particular flips meaning between the two.
 | `d3.scaleRadial` | **Adopted** | Present in the already-installed `d3-scale` 4.0.2 and typed in `@types/d3-scale` — no new dependency. Verified, not assumed; see Verified facts. | 2026-07-31 |
 | ⟳ `d3-selection`, `d3-brush` | **Rejected** | Retired repo-wide by the sibling change and enforced by `frontend/scripts/guard-d3.mjs` in `lint`. The workbench inherits the prohibition — its components are shared source. | 2026-07-31 |
 | ⟳ `esda` / `libpysal` | **Out of scope**, not deferred | The spec forbids statistical computation here. These belong to the change that consumes issue #9. | 2026-07-31 |
-| A new test runner (vitest/jest) for `test:fixtures` | **Open** | The repo has Playwright and two bespoke `node` scripts (`guard-d3.mjs`, `check-palettes.mjs`) and no unit runner. `test:fixtures` and `test:bundle-guard` are node-script shaped and should probably follow that pattern rather than add a runner. Not yet decided. | 2026-07-31 |
+| A new test runner (vitest/jest) for `test:fixtures` / `test:bundle-guard` | **Rejected** | The repo has Playwright and two bespoke `node` scripts (`guard-d3.mjs`, `check-palettes.mjs`) and no unit runner. Both new guards walk files and scan bundle output — the shape the existing scripts already have. A runner would add a config and a second testing idiom for no capability the repo lacks. Settled as architecture.md Decision 6; revisit at a third guard. | 2026-07-31 |
 
 ## Patterns adopted
 
@@ -125,6 +127,10 @@ Everything below was checked on 2026-07-31 against this branch
 | **`scaleRadial` is actually available** | exported by the installed `d3-scale` 4.0.2 and declared in `@types/d3-scale` 4.0.9 | grepped `node_modules/d3-scale/src/index.js` and the `.d.ts` — the export, not just the version number | 2026-07-31 | stable |
 | Storybook is absent | no Storybook package in either dependency block | parsed `package.json` | 2026-07-31 | decays |
 | Existing e2e surface | Playwright, 9 spec files; none of the three this change adds | `ls frontend/e2e/` | 2026-07-31 | decays |
+| **Vite bundles with Rolldown, not Rollup** | Vite **8.0.16**; `build.rollupOptions` is typed as a **deprecated alias** for `build.rolldownOptions`, both `RolldownOptions` | read `node_modules/vite/dist/node/index.d.ts:2088-2097` — the deprecation tag, not just the presence of the key | 2026-07-31 | decays (major versions) |
+| `input` is still the multi-entry mechanism | `build.rolldownOptions.input`, referenced by Vite's own dep-prebundling docs at `index.d.ts:928` | read the same type file | 2026-07-31 | decays |
+| **Default minifier is Oxc** | `build.minify` `@default 'oxc'`; options are `boolean \| "oxc" \| "terser" \| "esbuild"` | read `index.d.ts:2075-2079` | 2026-07-31 | decays |
+| Playwright already serves the frontend | `baseURL` `http://localhost:5173`, `webServer` runs `npm run dev` (and the backend on 8000), `reuseExistingServer: true` | read `frontend/playwright.config.js` | 2026-07-31 | decays |
 | Real tikina names are fully reachable via the fields `tests.md` names | 97 distinct values across `Province` / `Division` / `Tikina` | parsed `fiji_tikina.geojson` | 2026-07-31 | stable |
 | `admin_name` / `display_name` add no further real names | **0** values not already covered by the three fields above | set difference over all 86 features — so the field list in `tests.md` is complete for this file | 2026-07-31 | stable |
 | PICT real names via `name` / `country` | 26 distinct | parsed `pict_regions.geojson` | 2026-07-31 | stable |
@@ -139,8 +145,8 @@ Everything below was checked on 2026-07-31 against this branch
 
 | Assumption | Cost to check |
 | :--- | :--- |
-| **Vite 8 still configures multi-entry via `build.rollupOptions.input`, and an entry can be excluded from the production build the way Decision 1 describes.** The whole containment argument rests on this and it has not been run. | ~15 min — write the config, run `npm run build`, inspect `dist/`. Do this as task 2.2 *before* authoring any fixture |
-| A bundle scan can reliably detect a fixture module in production output. Minification and tree-shaking may leave no recognisable path or identifier, in which case a path-based guard passes vacuously — the worst possible failure for this change | One build. If it is vacuous, key the guard on a sentinel export string that survives minification, and assert the guard fails when a fixture is deliberately imported (the `tests.md` edge case already asks for the inverse case) |
+| **Vite's dev server serves an HTML file that is not in the build input.** Decision 1 now depends on this specific behaviour: production lists `index.html` only, and `/workbench.html` is expected to be reachable in dev anyway. The API half is settled (see Verified facts); this half is not, and was not run | ~10 min — task 2.2 checks it directly. Fallback if it does not hold: a second Vite config for the workbench, which leaves the containment argument intact since there is still no shared build input |
+| A bundle scan can reliably detect a fixture module in production output. **Oxc minification** (now confirmed as the default) may leave no recognisable path or identifier, in which case a path-based guard passes vacuously — the worst possible failure for this change, because it fails in the reassuring direction | One build plus a negative control, now written up as task 1.1a. If the control does not fail the guard, re-key on a sentinel string literal — literals survive minification, identifiers do not |
 | **5–8 categorical classes are simultaneously legible** — the actual research question | Cannot be automated. Manual pass at 3 / 5 / 8 / 16 classes, written down rather than left as an impression |
 | The watermark survives a screenshot in every render path — SVG `foreignObject` and canvas-composited layers behave differently under OS screenshot and `html2canvas` | Screenshot each fixture view once, crop to the chart, look |
 | Generic labels are enough that a cropped screenshot still reads as synthetic to someone who was not in the room | The `tests.md` manual "screenshot test", ideally shown to one person who has not seen the workbench |

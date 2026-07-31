@@ -66,8 +66,9 @@ them separate also lets the workbench proceed in parallel with the core chapters
 
 **Affected code**
 
-- `frontend/vite.config.js` — multi-entry `build.rollupOptions.input`; currently a single
-  entry with no router.
+- `frontend/vite.config.js` — `build.rolldownOptions.input` naming the application entry
+  only; currently a single entry with no router and no `build` key at all. (Vite 8 bundles
+  with Rolldown; `rollupOptions` is a deprecated alias.)
 - `frontend/workbench.html` + `frontend/src/workbench/` — new.
 - `frontend/src/fixtures/` — new; reachable only from the workbench entry.
 - `frontend/package.json` — a `dev:workbench` script. **No new runtime dependencies**;
