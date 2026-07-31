@@ -5,15 +5,24 @@ Three lab-note features are blocked on data acquisition tracked in GitHub issues
 population). The components themselves are not blocked — they are pure functions of their
 props.
 
-Current frontend state, verified: `frontend/vite.config.js` declares a **single entry**
-with no router; the only HTML entry is `frontend/index.html`; scripts are `dev`, `build`,
-`lint`, `preview`, `test:e2e`, `test:e2e:spatial`. There is no component-explorer tooling
-and no fixture directory.
+Current frontend state, verified 2026-07-31 (`research.md` → Verified facts):
+`frontend/vite.config.js` declares a **single entry** with no router and no `build` key at
+all; the only HTML entry is `frontend/index.html`; scripts are `dev`, `build`, `typecheck`,
+`lint`, `preview`, `test:e2e`, `test:e2e:spatial`, `test:palette`. There is no
+component-explorer tooling and no fixture directory. `lint` already chains a bespoke node
+guard (`scripts/guard-d3.mjs`), which is the pattern the new guards should follow.
 
-One component that *appears* to belong here does not: the **uncertainty box plot needs no
-fixture at all**. Real `_min` / `_mean` / `_max` already exist on 102 cells in
-`data/climate/processed/fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson`. It should be built against real
-data in `pacific-bivariate-scrollytelling-viz`, not mocked here.
+One component that *appears* to belong here does not, though not for the reason first
+recorded. The **uncertainty box plot is still out of scope**, but its data is not usable
+either: `extreme_heat_days_min` / `_mean` / `_max` exist on all 102 cells in
+`data/climate/processed/fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson` and every
+one of them is `0`, so a box plot over them renders a flat line. The fields being present
+was mistaken for the values being usable — see `research.md` → Superseded claims.
+
+The usable real field in that file is `mean_tasmax_c_mean` (95 non-null of 102,
+24.30–28.79 °C). So the box plot belongs in `pacific-bivariate-scrollytelling-viz` built
+against *that*, or it waits on issue #8 for a region-appropriate heat threshold. Either
+way it is not mocked here — but "its data is real" is no longer the reason.
 
 ## System Architecture Diagram
 
@@ -65,7 +74,9 @@ provenance check.
 - Any statistical computation. This change renders shapes.
 - Promoting components into the application — that happens when real data lands.
 - A component-explorer dependency (Storybook and similar). Unnecessary here.
-- Mocking the uncertainty box plot; its data is real and already present.
+- Mocking the uncertainty box plot. It stays out of this change, but see Context — its
+  heat-days values are degenerate, so it is not the "real data already exists" case it was
+  originally recorded as.
 
 ## Decisions
 

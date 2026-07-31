@@ -44,7 +44,7 @@ Fixture datasets SHALL NOT associate synthetic measurements with real geographic
 
 #### Scenario: Rose chart uses generic axis labels
 - **WHEN** the rose chart renders fixture data
-- **THEN** its axis labels are generic identifiers and none is a real province, country, or territory name
+- **THEN** its axis labels are generic identifiers and none is a real province, division, country, territory, or subregion name appearing in the project's reference geometry
 
 #### Scenario: Hotspot layer uses generic class names
 - **WHEN** the categorical hotspot layer renders over real tikina geometry

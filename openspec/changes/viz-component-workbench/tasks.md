@@ -11,7 +11,7 @@
 
 - [ ] 1.1 Write failing `test:bundle-guard` for **Fixture Data Is Confined To The Workbench Entry**: no `src/fixtures/` module in the production bundle; no workbench artefact in the production build; passes when a shared component is legitimately bundled.
 - [ ] 1.2 Write failing `e2e/workbench_containment.spec.ts` for the runtime half of the same requirement plus **Every Dataset Declares Its Provenance**: fixture-flagged data throws in the application entry; missing `provenance` is rejected with a naming error; `"real"` renders unwatermarked.
-- [ ] 1.3 Write failing `test:fixtures` for **Fixtures Do Not Attach Synthetic Values To Real Place Names**, checking labels against the actual `data/reference/pict_regions.geojson` and `data/reference/fiji_tikina.geojson` name fields rather than a hardcoded list, and rejecting ESRI category strings.
+- [ ] 1.3 Write failing `test:fixtures` for **Fixtures Do Not Attach Synthetic Values To Real Place Names**, checking labels against the actual `data/reference/pict_regions.geojson` and `data/reference/fiji_tikina.geojson` name fields rather than a hardcoded list, and rejecting ESRI category strings. Include `subregion` on the PICT file (`Polynesia` / `Micronesia` / `Melanesia`) — enumerate string-valued properties rather than hand-listing fields. Compare **whole normalised labels, not substrings**: `Ba` and `Ra` are real names. See `research.md` → Superseded claims.
 - [ ] 1.4 Write failing `e2e/workbench_watermark.spec.ts` for **Fixture Renderings Are Visibly Marked**, including that no control dismisses the marker.
 - [ ] 1.5 Write failing `e2e/workbench_components.spec.ts` for **Workbench Renders Components In Isolation** — each component renders with no map instance and no narrative state present.
 - [ ] 1.6 Write the failing source check for **The Workbench Computes No Analysis**.
@@ -50,7 +50,7 @@
 - [ ] 5.1 Run `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npm run test:bundle-guard`, `npm run test:fixtures`, and the workbench e2e specs. Record actual output.
 - [ ] 5.2 Complete the manual verification in `tests.md`, including the **screenshot crop test** — if a cropped fixture chart does not read as synthetic from its labels alone, the labels are too realistic and must be changed.
 - [ ] 5.3 **Record the categorical legibility finding**: at what class count do hotspot classes stop being distinguishable at a glance, over real tikina geometry? Write it down; this is the deliverable of the change, not an impression.
-- [ ] 5.4 Run the promotion rehearsal — pass the box plot real `_min` / `_mean` / `_max` from `data/climate/processed/fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson` and confirm it renders unwatermarked with no code change.
+- [ ] 5.4 Run the promotion rehearsal — pass a component real `mean_tasmax_c_mean` values from `data/climate/processed/fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson` (95 non-null of 102, 24.30–28.79 °C) and confirm it renders unwatermarked with no code change. Do **not** use `extreme_heat_days_*`: all 102 cells are `0`, so the rehearsal would pass on a flat line and demonstrate nothing.
 - [ ] 5.5 Write a verification record naming each criterion, the command run, and the result. Anything unverified is marked unverified, not complete.
 
 ## 6. Feed Back Into The Data Requests

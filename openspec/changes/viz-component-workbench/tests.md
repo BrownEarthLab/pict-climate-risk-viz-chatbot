@@ -25,8 +25,17 @@ beautifully but whose fixtures can reach production is a failure of this change.
 
 - `npm run test:fixtures`:
   - no fixture label matches any name in `data/reference/pict_regions.geojson`
-    (`name`, `country`) or `data/reference/fiji_tikina.geojson` (`Province`, `Division`, `Tikina`) — this
-    is checked against the real files, not a hardcoded list;
+    (`name`, `country`, **`subregion`**) or `data/reference/fiji_tikina.geojson`
+    (`Province`, `Division`, `Tikina`) — this is checked against the real files, not a
+    hardcoded list. `subregion` holds `Polynesia` / `Micronesia` / `Melanesia`; omitting it
+    lets a fixture labelled "Melanesia" pass. Prefer enumerating the string-valued
+    properties of each reference file over naming fields by hand, so a new name field
+    cannot silently open the same hole. (`admin_name` / `display_name` on the tikina file
+    were checked and add no values the three listed fields do not already cover.)
+  - the comparison is **whole-label, normalised** — trim and casefold, then compare for
+    equality. It MUST NOT be a substring test: real names go down to two characters
+    (`Ba`, `Ra`, and ten more at ≤ 3), so substring matching flags almost any English
+    label and the test becomes unusable;
   - no fixture class name matches an ESRI category string such as `Persistent Hot Spot`,
     `New Hot Spot`, or `Historical Hot Spot`;
   - every fixture dataset declares `provenance: "fixture"`.
@@ -85,8 +94,11 @@ beautifully but whose fixtures can reach production is a failure of this change.
     application state or API
 
 - **Promotion rehearsal**:
-  - **WHEN** a component is passed a real dataset (the box plot with actual `_min` /
-    `_mean` / `_max`) instead of a fixture
+  - **WHEN** a component is passed a real dataset instead of a fixture — use
+    `mean_tasmax_c_mean` from
+    `data/climate/processed/fiji_extreme_heat_days_2050s_ssp245_access_cm2.geojson`
+    (95 non-null of 102, 24.30–28.79 °C), **not** `extreme_heat_days_*`, which is `0` on
+    every cell and would render a flat line that proves nothing
   - **THEN** it renders with no code change and no watermark — confirming promotion will
     be a change of props, not a port
 
