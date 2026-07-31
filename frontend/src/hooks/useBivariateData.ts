@@ -11,6 +11,7 @@ import {
 } from "../dataviz/classify";
 import type { BivariateMode, DatasetDefinition } from "../dataviz/datasetDefinitions";
 import { getDatasetDefinition } from "../dataviz/datasetDefinitions";
+import { assertRealProvenance } from "../dataviz/provenance";
 import { PALETTES } from "../dataviz/paletteCore.js";
 
 export interface BivariateData {
@@ -38,6 +39,13 @@ async function fetchFeatures(def: DatasetDefinition): Promise<GeoJSON.Feature[]>
     throw new Error(`Failed to load dataset "${def.title}" from ${def.dataUrl}: HTTP ${res.status}`);
   }
   const geojson = (await res.json()) as GeoJSON.FeatureCollection;
+
+  // Runtime half of the containment contract (architecture.md Decision 3):
+  // refuse any dataset that is not provenance "real" — fixture data arriving
+  // through a path the build cannot see (a dev server, a paste, a future
+  // API) is caught here, naming the dataset.
+  assertRealProvenance(geojson, def.id);
+
   const features = geojson.features ?? [];
 
   // Derived property for the Fiji heat pair: year-to-year spread of extreme

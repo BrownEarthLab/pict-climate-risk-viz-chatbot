@@ -1,0 +1,4 @@
+/* Workbench styles: tailwind utilities only — deliberately NOT the
+   application stylesheet, which imports mapbox-gl CSS and drags the map
+   into this entry's module graph. */
+@import "tailwindcss";

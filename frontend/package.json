@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:workbench": "vite --open /workbench.html",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . && node scripts/guard-d3.mjs",
+    "lint": "eslint . && node scripts/guard-d3.mjs && node scripts/guard-fixture-imports.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:spatial": "playwright test e2e/spatial-query.spec.ts",
-    "test:palette": "node scripts/check-palettes.mjs"
+    "test:palette": "node scripts/check-palettes.mjs",
+    "test:bundle-guard": "node scripts/guard-bundle.mjs",
+    "test:fixtures": "node scripts/check-fixtures.mjs"
   },
   "dependencies": {
     "@mapbox/mapbox-gl-draw": "^1.5.1",
