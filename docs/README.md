@@ -3,24 +3,18 @@
 Entry point for anyone — human or agent — picking up this project. Links only; the
 content lives in the linked files.
 
-## ⚠️ Read this first if you cloned from GitHub
-
-`openspec/`, `AGENTS.md`, `.claude/`, `.codex/`, `.agent/`, `.opencode/` and `sync-specs.sh`
-are **excluded from this git repository** via `.git/info/exclude`. They are versioned in a
-separate spec vault at `project-specs/pict-climate-risk-viz-chatbot`, synced with
-`./sync-specs.sh push` / `pull`.
-
-**So a fresh clone does not contain the active change specs or the agent instructions.**
-If you need them, ask the repo owner to run `./sync-specs.sh push` and share the vault, or
-work from the mirrors below. Everything under `docs/` **is** tracked and travels with the
-repo.
-
 ## Active work
+
+Change specs live in `openspec/` and **are tracked in this repository** — a clone has
+them.
 
 | Change | Where | What it is |
 | :--- | :--- | :--- |
-| `pacific-bivariate-scrollytelling-viz` | `openspec/changes/` (vault) | The v2 deliverable — bivariate choropleth encoding, legend-as-brush, scrollytelling frame |
-| `viz-component-workbench` | `openspec/changes/` (vault) | Isolated component gallery with fixture containment, for components blocked on data |
+| `pacific-bivariate-scrollytelling-viz` | [`openspec/changes/pacific-bivariate-scrollytelling-viz/`](../openspec/changes/pacific-bivariate-scrollytelling-viz/) | The v2 deliverable — bivariate choropleth encoding, legend-as-brush, scrollytelling frame |
+| `viz-component-workbench` | [`openspec/changes/viz-component-workbench/`](../openspec/changes/viz-component-workbench/) | Isolated component gallery with fixture containment, for components blocked on data |
+
+Only the agent tool configs (`.claude/`, `.codex/`, `.agent/`, `.opencode/`, `AGENTS.md`)
+stay outside the repo, in a local spec vault — see `AGENTS.md` if you have it.
 
 Each carries `proposal.md` (why + scope), `architecture.md` (decisions, several of them
 prohibitions), `specs/` (requirements + scenarios), `tests.md` (every criterion names its
@@ -44,8 +38,8 @@ Read in this order:
 
 ## Archived
 
-- [archive/pacific-climate-brushing-viz/](archive/pacific-climate-brushing-viz/) — the
-  superseded v1 change, frozen, with its own README. Code is on branch
+- [`openspec/changes/archive/2026-07-30-pacific-climate-brushing-viz/`](../openspec/changes/archive/2026-07-30-pacific-climate-brushing-viz/)
+  — the superseded v1 change, frozen, with its own README. Code is on branch
   `feature/pacific-climate-brushing-viz`, tag `v0-brushing-viz-archive`.
 
 ## Data gaps
