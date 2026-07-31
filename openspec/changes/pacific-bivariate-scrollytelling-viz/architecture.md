@@ -169,6 +169,58 @@ Classification runs once and attaches a class index to each feature.
 - **Alternative considered.** Compute breaks per viewport for maximum contrast. Rejected —
   it makes two screenshots of the same data non-comparable.
 
+### Decision 4a: The classification method is fixed per mode, not per dataset
+
+| Mode | Method | Applied to |
+| :--- | :--- | :--- |
+| `sequential-sequential` | **Quantile** (tertiles) | both axes |
+| `qualitative-sequential` | Categories as-is / **quantile** | qualitative axis / sequential axis |
+| `diverging-diverging` | **Symmetric equal-interval outward from the declared norm** | both axes |
+
+- **Rationale — why quantile for sequential axes.** The legend is the *primary brush
+  control* (see the `bivariate-legend-brushing` spec). An unpopulated legend cell is a
+  **dead control**: the reader clicks it and nothing happens, which reads as a bug.
+  Quantile classification puts roughly a third of features in each band, so all nine cells
+  have members and every cell does something. Equal-interval over a skewed distribution —
+  which extreme-heat-days is — would leave corner cells empty.
+- **Rationale — why *not* quantile for diverging.** The center cell must sit at the
+  declared norm, which for sea level anomaly is zero. Quantile puts the center band at the
+  *median*, wherever that happens to fall. If the median anomaly is +40mm, a quantile
+  "center" would colour +40mm as normal, which is precisely the claim the diverging
+  encoding exists to avoid. Diverging therefore uses breaks placed symmetrically either
+  side of the norm, so distance from the norm is what the colour encodes.
+- **Consequence.** The dataset definition declares the *norm* (diverging only); it does
+  **not** declare the method. The method follows from the mode. This removes a per-dataset
+  degree of freedom that would otherwise make two chapters silently non-comparable.
+- **Alternative considered.** Natural breaks (Jenks). Rejected: the break values become
+  data-dependent and hard to explain in a legend, and the lab notes require the encoding be
+  self-explanatory. Also rejected for diverging for the same reason as quantile — it does
+  not respect a fixed center.
+- **If a distribution defeats quantile** — for instance many tied values putting >⅓ of
+  features on one break — fail loudly at classification time rather than silently
+  producing an empty cell. The legend's contract is that every cell is clickable.
+
+### Decision 4b: Palette distinguishability is measured in ΔE (CIEDE2000), not contrast ratio
+
+The palette check computes **CIEDE2000 colour difference (ΔE00) ≥ 10** between every pair
+of cells adjacent in the 3×3 matrix, evaluated both in sRGB and under a deuteranopia
+simulation. Text drawn *over* a fill is separately subject to WCAG contrast, but that is a
+different check on a different pair of colours.
+
+- **Rationale.** WCAG contrast ratio is a luminance-only measure designed for text
+  legibility against a background. Two map fills can pass a WCAG-style comparison and
+  still be indistinguishable as areas, and two perfectly distinguishable hues at equal
+  lightness score close to 1.0 — the wrong answer. ΔE00 is a perceptual difference metric
+  and is the right tool for "can a reader tell these two regions apart".
+- **Threshold.** ΔE00 ≈ 2.3 is the just-noticeable difference under ideal side-by-side
+  conditions. Map fills are separated by borders, viewed at varying sizes, and often at a
+  distance, so the bar is set considerably higher at **10**. This is a defensible starting
+  value, not a standard — if a palette that reads well in practice fails at 10, revisit
+  the threshold deliberately and record the change here rather than quietly lowering it.
+- **Adjacency only.** Non-adjacent cells (opposite corners) are not required to pass,
+  since the 3×3 matrix is a continuum and forcing all 36 pairs apart would over-constrain
+  the palette.
+
 ### Decision 5: Keep Mapbox GL; do not migrate to `d3-geo` SVG
 
 - **Rationale.** The reference entry renders its map as projected SVG via `d3-geo`, which
@@ -257,5 +309,7 @@ Classification runs once and attaches a class index to each feature.
    competition framing and the PDH indicators push regional.
 4. **Is this targeting the Pacific Dataviz Challenge, or lab research output first?** The
    PI redirect suggests research now leads, which changes what "done" means.
-5. **Which classification method per variable** — quantile, equal interval, or natural
-   breaks? Decision 4 requires it be declared; it does not yet say which.
+5. ~~Which classification method per variable?~~ **Resolved — see Decision 4a.** Quantile
+   for sequential axes (so no legend cell is a dead control), symmetric equal-interval
+   about the declared norm for diverging. Method follows from mode and is not a
+   per-dataset choice.

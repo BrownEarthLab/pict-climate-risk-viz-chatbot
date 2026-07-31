@@ -41,11 +41,27 @@ about the map must query the map.
   - a dataset definition pairing variables of differing declared scale is rejected at load
     with an error naming both scales;
   - break values and units are present in the rendered legend.
-- `npm run test:palette` (or a pytest/node equivalent):
-  - each mode's nine colors pass the documented contrast threshold;
-  - every pair of cells adjacent in the 3×3 matrix remains distinguishable under
-    deuteranopia simulation;
+- `npm run test:palette` (or a pytest/node equivalent) — thresholds fixed by
+  `architecture.md` Decision 4b:
+  - every pair of cells **adjacent** in the 3×3 matrix has **ΔE00 (CIEDE2000) ≥ 10** in
+    sRGB. Note this is a *perceptual difference* metric — **not** WCAG contrast ratio,
+    which is a luminance measure for text on a background and gives the wrong answer for
+    two map fills at equal lightness;
+  - the same adjacency check passes under a **deuteranopia simulation**;
+  - non-adjacent pairs (opposite corners) are exempt — the matrix is a continuum and
+    forcing all 36 pairs apart over-constrains the palette;
   - *this must fail the run on violation, not warn.* See `docs/v2-plan-appraisal.md` §5.
+  - WCAG contrast still applies to any **text drawn over** a fill; that is a separate
+    check on a different pair of colours.
+- Classification behaviour (`architecture.md` Decision 4a) — method follows from mode, not
+  from the dataset:
+  - `sequential-sequential` uses quantile breaks, and **every one of the nine legend cells
+    has at least one member**, since an empty cell is a dead brush control;
+  - `diverging-diverging` places breaks symmetrically about the declared norm, and a
+    feature exactly at the norm classifies to the center band — verified with sea level
+    anomaly, whose norm is `0`;
+  - a distribution that cannot be split into tertiles (heavy ties) fails loudly at
+    classification rather than yielding an empty cell.
 
 ### Legend brushing and linking
 

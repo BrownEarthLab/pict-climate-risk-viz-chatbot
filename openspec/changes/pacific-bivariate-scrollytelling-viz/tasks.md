@@ -18,7 +18,7 @@
 
 - [ ] 1.1 Write failing `e2e/map_state_smoke.spec.ts` for **Map Canvas Loading**: sources retrievable via `getSource` after style load, active layer at `visibility: "visible"`, `querySourceFeatures` non-zero, map reachable from browser context. Must fail on a cold load with no interaction.
 - [ ] 1.2 Write failing `e2e/bivariate_encoding.spec.ts` for **Three Selectable Bivariate Modes**, **Diverging Mode Centers On A Declared Norm**, and **Encoding Operates At A Single Declared Scale** — including class stability across pan/zoom and rejection of a mixed-scale definition.
-- [ ] 1.3 Write the failing palette check for **Palette Accessibility Is Verified, Not Asserted**: contrast thresholds plus deuteranopia distinguishability for adjacent 3×3 cells. It must fail the run, not warn.
+- [ ] 1.3 Write the failing palette check for **Palette Accessibility Is Verified, Not Asserted**: ΔE00 ≥ 10 between matrix-adjacent cells, in sRGB and under deuteranopia (architecture.md Decision 4b — ΔE, **not** WCAG contrast ratio). It must fail the run, not warn.
 - [ ] 1.4 Write failing `e2e/legend_brushing.spec.ts` for **The Legend Is An Interactive Control**, **Highlighting Uses Mapbox Feature State**, and **One Identity Contract Across Views** — asserting via `getFeatureState`, and asserting the fill paint references `["feature-state", ...]`.
 - [ ] 1.5 Write failing tests for **Search Brushes A Named Region** and **Tooltips Render Typed Fields, Never Raw Properties**, including the negative assertion that no raw property key appears in tooltip text.
 - [ ] 1.6 Write failing `e2e/narrative_frame.spec.ts` for **One Encoding Visible Per Chapter**, **Analysis Output Renders Beside The Map**, **Opening Splash Screen Is Minimal**, **Free Exploration Clears Narrative State**, and **Narrative State Does Not Override Manual Selection**.
@@ -34,7 +34,7 @@
 
 ## 3. Dataset Definitions and Classification
 
-- [ ] 3.1 Define the dataset-definition shape: declared geographic scale, two variables, per-variable classification method, and an explicit norm for diverging mode.
+- [ ] 3.1 Define the dataset-definition shape: declared geographic scale, two variables, and an explicit norm for diverging mode. The classification **method is not declared per dataset** — it follows from the mode (architecture.md Decision 4a): quantile for sequential axes, symmetric equal-interval about the norm for diverging.
 - [ ] 3.2 Author definitions for the verified pairs (`docs/v2-direction-research.md` §3a): heat × **inter-annual variability** (Fiji, 102 cells — `_max − _min` is year-to-year spread for one model, **not** model uncertainty; label it accordingly in the UI); sea level anomaly × indicator deviation (PICT, 26); `region_group` × population (PICT, country).
 - [ ] 3.3 Implement `classify()` as a pure function returning a stable class index per feature; reject mixed-scale definitions at load with an error naming both scales.
 - [ ] 3.4 Expose derived break values and units for legend display.
@@ -45,7 +45,7 @@
 - [ ] 4.1 Construct the `sequential-sequential` 3×3 palette from two sequential ramps.
 - [ ] 4.2 Construct `diverging-diverging` as two diverging ramps blended about a neutral center.
 - [ ] 4.3 Construct `qualitative-sequential` as a hue per category with lightness carrying the sequential axis.
-- [ ] 4.4 Make 1.3 pass. If a palette fails, change the palette — do not relax the threshold.
+- [ ] 4.4 Make 1.3 pass — ΔE00 (CIEDE2000) ≥ 10 between matrix-adjacent cells, in sRGB and under deuteranopia (architecture.md Decision 4b). If a palette fails, change the palette — do not relax the threshold.
 
 ## 5. Bivariate Map Layer
 

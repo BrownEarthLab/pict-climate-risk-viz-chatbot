@@ -87,3 +87,6 @@ sync-specs.sh
 data/cache/
 
 # -----------------------------
+
+# Playwright MCP session artifacts
+.playwright-mcp/
