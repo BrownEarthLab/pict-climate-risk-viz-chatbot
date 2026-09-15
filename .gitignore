@@ -142,9 +142,27 @@ reports/tmp/
 # -----------------------------
 # Docker/local runtime artifacts
 # -----------------------------
+<<<<<<< HEAD
 .docker/
 docker-compose.override.yml
 
 
 data/reference/pict/*/worldpop/*.tif
 data/hazards/tropical_cyclone/raw/TC_500_year.asc
+=======
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+# -----------------------------
+# Spec sync tooling (lives outside this repo)
+# -----------------------------
+sync-specs.sh
+
+# -----------------------------
+# Data cache (generated, not source)
+# -----------------------------
+data/cache/
+
+# -----------------------------
+>>>>>>> 08473d9606b4f6cdbe247874f9413dd2d7dc0926

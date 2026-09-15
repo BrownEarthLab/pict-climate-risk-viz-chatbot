@@ -1,5 +1,5 @@
 const isDevelopment = window.location.port === '5173';
-export const API_BASE_URL = isDevelopment ? 'http://localhost:8000' : '';
+export const API_BASE_URL = isDevelopment ? `http://${window.location.hostname}:8000` : '';
 
 export const getApiUrl = (endpoint: string): string => {
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;

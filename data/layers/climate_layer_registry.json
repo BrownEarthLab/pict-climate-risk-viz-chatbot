@@ -25,6 +25,52 @@
     "source_dataset": "NASA NEX-GDDP-CMIP6",
     "source_access_method": "NASA NCCS THREDDS NetcdfSubset",
     "source_url_base": "https://ds.nccs.nasa.gov/thredds/ncss/grid/AMES/NEX/GDDP-CMIP6",
-    "description": "Derived extreme_heat_days for Fiji, 2050s, SSP2-4.5, model ACCESS-CM2. Values represent mean annual number of days with tasmax >= 35.0\u00b0C."
+    "description": "Derived extreme_heat_days for Fiji, 2050s, SSP2-4.5, model ACCESS-CM2. Values represent mean annual number of days with tasmax >= 35.0°C."
+  },
+  {
+    "layer_id": "sea_level_rise_dynamic",
+    "artifact_type": "dynamic_hazard_layer",
+    "variable": "sea_level_anomaly",
+    "source_variable": "SEA_LVL",
+    "region_name": "PICT",
+    "units": "meters",
+    "dynamic_endpoint": "/api/layers/sea_level",
+    "source_dataset": "Pacific Data Hub SDMX (SPC,DF_CLIMATE_CHANGE,1.0)",
+    "source_access_method": "SDMX REST API (stats-sdmx-disseminate.pacificdata.org)",
+    "source_url_base": "https://stats-sdmx-disseminate.pacificdata.org/rest/data/SPC,DF_CLIMATE_CHANGE,1.0/A.SEA_LVL.?dimensionAtObservation=AllDimensions&detail=dataonly&format=jsondata",
+    "description": "Dynamic sea level anomalies layer sourced from the Pacific Data Hub SDMX dissemination API. Indicators are joined to regional boundaries and binned to H3 hexagons (Resolution 4/5).",
+    "geometry_type": "h3_grid",
+    "h3_resolutions": [4, 5],
+    "cache_ttl_hours": 24
+  },
+  {
+    "layer_id": "power_gen_dynamic",
+    "artifact_type": "dynamic_exposure_layer",
+    "variable": "power_generation",
+    "source_variable": null,
+    "region_name": "PICT",
+    "units": "GWh",
+    "dynamic_endpoint": "/api/layers/power_gen",
+    "source_dataset": "Pacific Data Hub SDMX (SPC,DF_POWER_GEN,1.0)",
+    "source_access_method": "SDMX REST API (stats-sdmx-disseminate.pacificdata.org)",
+    "source_url_base": "https://stats-sdmx-disseminate.pacificdata.org/rest/data/SPC,DF_POWER_GEN,1.0/A...?dimensionAtObservation=AllDimensions&detail=dataonly&format=jsondata",
+    "description": "Dynamic power generation layer sourced from the Pacific Data Hub SDMX dissemination API. Annual electricity generation in GWh per Pacific Island country, summed across all energy sources and grid-connection types, rendered as a regional choropleth.",
+    "geometry_type": "choropleth",
+    "cache_ttl_hours": 24
+  },
+  {
+    "layer_id": "water_access_dynamic",
+    "artifact_type": "dynamic_vulnerability_layer",
+    "variable": "safe_water_access",
+    "source_variable": "SH_H2O_SAFE",
+    "region_name": "PICT",
+    "units": "percentage",
+    "dynamic_endpoint": "/api/layers/water_access",
+    "source_dataset": "Pacific Data Hub SDMX (SPC,DF_SDG_06,3.0)",
+    "source_access_method": "SDMX REST API (stats-sdmx-disseminate.pacificdata.org)",
+    "source_url_base": "https://stats-sdmx-disseminate.pacificdata.org/rest/data/SPC,DF_SDG_06,3.0/A.SH_H2O_SAFE...._T.....?dimensionAtObservation=AllDimensions&detail=dataonly&format=jsondata",
+    "description": "Dynamic safely managed drinking water access layer sourced from the Pacific Data Hub SDMX dissemination API. Regional values displayed as atoll-level choropleth.",
+    "geometry_type": "choropleth",
+    "cache_ttl_hours": 24
   }
 ]

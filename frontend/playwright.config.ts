@@ -7,6 +7,9 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:5173",
     headless: true,
+    launchOptions: {
+      args: ["--use-gl=angle", "--use-gl=swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"],
+    },
   },
   webServer: [
     {

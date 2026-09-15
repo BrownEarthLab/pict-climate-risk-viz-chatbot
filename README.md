@@ -243,3 +243,183 @@ Planned projection source:
 CORDEX / ESGF daily tasmax NetCDF data
 ClimDEX / ETCCDI-style index definitions
 ```
+
+## Data Download / Rebuild Instructions
+
+### 1. Install dependencies
+
+From the repository root:
+
+```bash
+cd backend
+npm install
+
+cd ../frontend
+npm install
+```
+
+Some data-building scripts also require Python geospatial packages:
+
+```bash
+python -m pip install geopandas requests pyogrio fiona shapely
+```
+
+### 2. Required local folders
+
+Create the expected local data/cache folders:
+
+```bash
+mkdir -p data/reference/pict
+mkdir -p data/osm
+mkdir -p data/climate/raw/cordex
+mkdir -p data/climate/raw/wet_bulb
+mkdir -p data/climate/processed
+mkdir -p backend/cache/admin_assets
+mkdir -p backend/cache/climate_indices
+```
+
+### 3. Fiji reference data
+
+The current Fiji MVP depends on these reference GeoJSON files contained in our shared drive:
+
+```txt
+data/reference/fiji_admin_adm1.geojson
+data/reference/fiji_admin_adm2.geojson
+data/reference/fiji_tikina.geojson
+```
+
+### 4. Build / download PICT region boundaries and population files
+
+To download the PICT region boundary registry and population inputs, run:
+
+```bash
+node scripts/bootstrap_pict_region_data.mjs
+```
+
+This creates/updates files under:
+
+```txt
+data/reference/pict/
+data/reference/pict_region_registry.json
+data/reference/pict_bootstrap_manifest.json
+```
+
+To run it for only one country/territory:
+
+```bash
+node scripts/bootstrap_pict_region_data.mjs --countries WSM
+```
+
+To refresh Fiji boundary files only:
+
+```bash
+node scripts/bootstrap_pict_region_data.mjs \
+  --countries FJI \
+  --skip-population \
+  --skip-assets
+```
+
+### 5. Build cached infrastructure assets
+
+The app uses cached OSM/Geofabrik-derived infrastructure assets instead of live Overpass queries during normal use.
+
+To build asset caches for all supported PICT countries/territories:
+
+```bash
+python scripts/build_pict_assets_from_geofabrik_gpkg.py
+```
+
+To build or refresh only selected countries:
+
+```bash
+python scripts/build_pict_assets_from_geofabrik_gpkg.py \
+  --countries WSM,TON,VUT
+```
+
+To force-refresh existing downloaded Geofabrik files and backend cache files:
+
+```bash
+python scripts/build_pict_assets_from_geofabrik_gpkg.py \
+  --countries WSM,TON,VUT \
+  --force-download \
+  --force-cache
+```
+
+Generated files are stored under:
+
+```txt
+data/osm/
+backend/cache/admin_assets/
+data/reference/pict_geofabrik_asset_manifest.json
+```
+
+### 6. Fiji tikina asset cache
+
+For Fiji tikina-level asset lookup, build tikina caches from the province-level asset cache:
+
+```bash
+node scripts/build_tikina_assets_from_province_cache.mjs
+```
+
+This writes tikina asset cache files under:
+
+```txt
+backend/cache/admin_assets/
+```
+
+### 7. Run the backend
+
+From the repository root:
+
+```bash
+cd backend
+ADMIN_ASSET_WARMUP=false node server.js
+```
+
+The backend should run on:
+
+```txt
+http://localhost:8000
+```
+
+Useful backend checks:
+
+```bash
+curl -s http://localhost:8000/api/regions | jq
+```
+
+```bash
+curl -s 'http://localhost:8000/api/admin-boundaries?country_id=fji&admin_level=tikina' | jq '.metadata'
+```
+
+```bash
+curl -s http://localhost:8000/api/climate-catalog | jq '{variables,mvp_metrics,time_windows:.time_windows}'
+```
+
+### 10. Run the frontend
+
+In another terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Then open the local Vite URL shown in the terminal.
+
+### 11. Files intentionally not committed
+
+The following are generated or large local data files and should normally stay out of git:
+
+```txt
+backend/cache/
+data/reference/pict/
+data/osm/
+data/climate/raw/
+data/climate/processed/
+*.nc
+*.tif
+*.tiff
+*.gpkg
+*.gpkg.zip
+```

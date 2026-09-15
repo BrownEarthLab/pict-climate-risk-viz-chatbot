@@ -1,0 +1,160 @@
+{
+  "version": "0.1.0",
+  "plan_id": "cordex_tasmax_regcm4_phase1",
+  "status": "confirmed_choices_pending_esgf_availability_check",
+  "purpose": "Download daily CORDEX tasmax data, compute ClimDEX/ETCCDI-style heat indices, and cache yearly / 5-year / decade layers for the PICT climate-risk app.",
+  "keep_existing_forecast_workflow": true,
+  "data_source": {
+    "primary_portal": "ESGF MetaGrid",
+    "primary_search_url": "https://esgf-metagrid.cloud.dkrz.de/search",
+    "project": "CORDEX",
+    "domain_priority": [
+      "AUS-22",
+      "AUS-44"
+    ],
+    "frequency": "day",
+    "variable": "tasmax",
+    "variable_label": "Daily maximum near-surface air temperature / Tmax",
+    "file_type": "NetCDF"
+  },
+  "model_choice": {
+    "rcm_institute": "ICTP",
+    "rcm_model_family": "RegCM4",
+    "rcm_model_id_candidates": [
+      "ICTP-RegCM4-7",
+      "RegCM4-7",
+      "RegCM4-7_v0"
+    ],
+    "rcm_version_candidates": [
+      "v0"
+    ],
+    "meeting_label": "ICTP RegCM4 / RegCM4-7_v0",
+    "availability_note": "Do not assume every experiment exists for every driver/domain. First verify ESGF availability and save exact dataset IDs/URLs."
+  },
+  "experiments": [
+    {
+      "experiment_id": "historical",
+      "required": true,
+      "role": "Historical model period for baseline/projection comparison."
+    },
+    {
+      "experiment_id": "rcp45",
+      "required": true,
+      "role": "Moderate-emissions future projection scenario."
+    },
+    {
+      "experiment_id": "rcp85",
+      "required": true,
+      "role": "High-emissions future projection scenario."
+    },
+    {
+      "experiment_id": "evaluation",
+      "required": false,
+      "role": "ERA-Interim-driven evaluation run; validation only, not future projection.",
+      "driver_hint": "ECMWF-ERAINT"
+    }
+  ],
+  "ensemble_strategy": {
+    "phase_1": "Start with one available run to validate the pipeline.",
+    "phase_2": "Expand to a small ensemble if download size and availability are manageable.",
+    "summary_outputs_if_ensemble": [
+      "ensemble_mean",
+      "ensemble_min",
+      "ensemble_max",
+      "ensemble_spread",
+      "model_agreement_on_threshold_crossing"
+    ]
+  },
+  "approved_thresholds_c": [
+    30,
+    32,
+    35,
+    38,
+    40
+  ],
+  "metrics_to_compute": [
+    {
+      "metric_id": "days_above_threshold",
+      "label": "Days above threshold",
+      "requires_threshold": true,
+      "unit": "days/year"
+    },
+    {
+      "metric_id": "share_days_above_threshold",
+      "label": "Share of days above threshold",
+      "requires_threshold": true,
+      "unit": "percent of days"
+    },
+    {
+      "metric_id": "ever_reaches_threshold",
+      "label": "Ever reaches threshold",
+      "requires_threshold": true,
+      "unit": "boolean/year; share or any flag for multi-year windows"
+    },
+    {
+      "metric_id": "max_consecutive_days_above_threshold",
+      "label": "Longest hot spell above fixed threshold",
+      "requires_threshold": true,
+      "unit": "consecutive days"
+    },
+    {
+      "metric_id": "txx",
+      "label": "TXx / annual maximum daily Tmax",
+      "requires_threshold": false,
+      "unit": "\u00b0C"
+    },
+    {
+      "metric_id": "tx90p",
+      "label": "TX90p / percentage of days above local 90th percentile",
+      "requires_threshold": false,
+      "unit": "percent of days",
+      "requires_baseline": true
+    },
+    {
+      "metric_id": "wsdi",
+      "label": "WSDI / warm spell duration index",
+      "requires_threshold": false,
+      "unit": "days/year",
+      "requires_baseline": true,
+      "default_minimum_spell_length_days": 6
+    }
+  ],
+  "time_windows": {
+    "yearly": "One annual value per grid/admin unit.",
+    "five_year": "Mean annual value inside a 5-year block.",
+    "decade": "Mean annual value inside a decade."
+  },
+  "baseline_candidates_for_percentile_indices": [
+    {
+      "period": "1981-2010",
+      "preference": "preferred_if_available"
+    },
+    {
+      "period": "1961-1990",
+      "preference": "climdex_reference_definition"
+    }
+  ],
+  "spatial_outputs": {
+    "h3_resolution_first_pass": 6,
+    "h3_resolution_optional": [
+      5,
+      6,
+      7
+    ],
+    "admin_outputs": [
+      "adm0",
+      "adm1",
+      "adm2",
+      "fiji_province",
+      "fiji_tikina"
+    ],
+    "first_country": "fji",
+    "later_scope": "all_pict_countries"
+  },
+  "raw_data_paths": {
+    "cordex_raw_dir": "data/climate/raw/cordex/",
+    "download_manifest_dir": "data/climate/manifests/",
+    "processed_dir": "data/climate/processed/",
+    "backend_cache_dir": "backend/cache/climate_indices/"
+  }
+}
