@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { getApiUrl } from "../../config/api";
+import { fetchClimateIndexLayer } from "../../api/climateIndex";
+import { fetchTropicalCycloneHazardLayer } from "../../api/tropicalCycloneHazard";
 import { useMapbox } from "../../hooks/useMapbox";
 import FeatureHighlighter from "./FeatureHighlighter";
 import SpatialQueryPanel from "./SpatialQueryPanel";
@@ -115,6 +117,8 @@ interface AdminBoundaryConfig {
 
 type MapLayer = "tas" | "wet_bulb" | "manual_heat_risk" | null;
 type HeatDisplayMode = "combined" | "risk" | "uncertainty";
+type ClimateTimeWindow = "yearly" | "5_year" | "decade";
+type ClimateScenario = "ssp245" | "ssp585";
 
 type BoundaryLoadStatus =
   | "idle"
@@ -133,6 +137,28 @@ interface BoundaryLoadState {
   percent: number;
   featureCount?: number;
   error?: string;
+}
+
+interface ClimateLayerSummary {
+  featureCount: number;
+  meanTx90p: number | null;
+  maxTx90p: number | null;
+  meanReliability: number | null;
+  meanUncertaintySpread: number | null;
+  highRiskCellCount: number;
+  lowReliabilityCellCount: number;
+  highRiskHighReliabilityCellCount: number;
+  highRiskLowReliabilityCellCount: number;
+  dominantBivariateClass: string | null;
+}
+
+interface TropicalCycloneHazardSummary {
+  featureCount: number;
+  meanHazard: number | null;
+  maxHazard: number | null;
+  highHazardCellCount: number;
+  veryHighHazardCellCount: number;
+  dominantHazardClass: string | null;
 }
 
 interface AnalysisSettings {
@@ -344,6 +370,276 @@ function formatPercentValue(value: unknown, fallback = "—"): string {
   if (!Number.isFinite(numberValue)) return fallback;
 
   return `${Math.round(numberValue * 100)}%`;
+}
+
+function getFiniteClimateNumber(value: unknown): number | null {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function formatClimatePercent(value: unknown, fallback = "—"): string {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return fallback;
+
+  return `${numberValue.toFixed(1)}%`;
+}
+
+function formatReliabilityValue(value: unknown, fallback = "—"): string {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return fallback;
+
+  return numberValue.toFixed(2);
+}
+
+function formatClimateClass(value: unknown, fallback = "—"): string {
+  const raw = String(value || "").trim();
+
+  if (!raw) return fallback;
+
+  return raw
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getClimateRiskClass(properties: Record<string, unknown>): string {
+  return String(properties.risk_class || "").toLowerCase();
+}
+
+function getClimateReliabilityClass(properties: Record<string, unknown>): string {
+  return String(properties.reliability_class || "").toLowerCase();
+}
+
+function isHighClimateRisk(properties: Record<string, unknown>): boolean {
+  const riskClass = getClimateRiskClass(properties);
+
+  if (riskClass === "high" || riskClass === "very_high") return true;
+
+  const value = getFiniteClimateNumber(
+    properties.value ?? properties.tx90p ?? properties.ensemble_mean_tx90p,
+  );
+
+  return value !== null && value >= 50;
+}
+
+function isLowClimateReliability(properties: Record<string, unknown>): boolean {
+  const reliabilityClass = getClimateReliabilityClass(properties);
+
+  if (reliabilityClass === "low") return true;
+
+  const reliabilityScore = getFiniteClimateNumber(properties.reliability_score);
+
+  return reliabilityScore !== null && reliabilityScore < 0.34;
+}
+
+function isHighClimateReliability(properties: Record<string, unknown>): boolean {
+  const reliabilityClass = getClimateReliabilityClass(properties);
+
+  if (reliabilityClass === "high") return true;
+
+  const reliabilityScore = getFiniteClimateNumber(properties.reliability_score);
+
+  return reliabilityScore !== null && reliabilityScore >= 0.67;
+}
+
+function getMeanOrNull(values: number[]): number | null {
+  if (values.length === 0) return null;
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function computeClimateLayerSummary(
+  features: GeoJSON.Feature[],
+): ClimateLayerSummary | null {
+  if (!features.length) return null;
+
+  const tx90pValues: number[] = [];
+  const reliabilityValues: number[] = [];
+  const uncertaintySpreadValues: number[] = [];
+  const bivariateClassCounts = new Map<string, number>();
+
+  let highRiskCellCount = 0;
+  let lowReliabilityCellCount = 0;
+  let highRiskHighReliabilityCellCount = 0;
+  let highRiskLowReliabilityCellCount = 0;
+
+  for (const feature of features) {
+    const properties = (feature.properties || {}) as Record<string, unknown>;
+
+    const tx90p = getFiniteClimateNumber(
+      properties.value ?? properties.tx90p ?? properties.ensemble_mean_tx90p,
+    );
+
+    if (tx90p !== null) tx90pValues.push(tx90p);
+
+    const reliability = getFiniteClimateNumber(properties.reliability_score);
+
+    if (reliability !== null) reliabilityValues.push(reliability);
+
+    const uncertaintySpread = getFiniteClimateNumber(properties.uncertainty_spread);
+
+    if (uncertaintySpread !== null) {
+      uncertaintySpreadValues.push(uncertaintySpread);
+    }
+
+    const bivariateClass = String(properties.bivariate_class || "").trim();
+
+    if (bivariateClass) {
+      bivariateClassCounts.set(
+        bivariateClass,
+        (bivariateClassCounts.get(bivariateClass) ?? 0) + 1,
+      );
+    }
+
+    const highRisk = isHighClimateRisk(properties);
+    const lowReliability = isLowClimateReliability(properties);
+    const highReliability = isHighClimateReliability(properties);
+
+    if (highRisk) highRiskCellCount += 1;
+    if (lowReliability) lowReliabilityCellCount += 1;
+    if (highRisk && highReliability) highRiskHighReliabilityCellCount += 1;
+    if (highRisk && lowReliability) highRiskLowReliabilityCellCount += 1;
+  }
+
+  const dominantBivariateClass =
+    [...bivariateClassCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+    null;
+
+  return {
+    featureCount: features.length,
+    meanTx90p: getMeanOrNull(tx90pValues),
+    maxTx90p: tx90pValues.length > 0 ? Math.max(...tx90pValues) : null,
+    meanReliability: getMeanOrNull(reliabilityValues),
+    meanUncertaintySpread: getMeanOrNull(uncertaintySpreadValues),
+    highRiskCellCount,
+    lowReliabilityCellCount,
+    highRiskHighReliabilityCellCount,
+    highRiskLowReliabilityCellCount,
+    dominantBivariateClass,
+  };
+}
+
+function getTropicalCycloneHazardValue(
+  properties: Record<string, unknown>,
+): number | null {
+  return getFiniteClimateNumber(properties.hazard_value ?? properties.value);
+}
+
+function computeTropicalCycloneHazardSummary(
+  features: GeoJSON.Feature[],
+): TropicalCycloneHazardSummary | null {
+  const hazardValues: number[] = [];
+  const classCounts: Record<string, number> = {};
+  let highHazardCellCount = 0;
+  let veryHighHazardCellCount = 0;
+
+  features.forEach((feature) => {
+    const properties = (feature.properties || {}) as Record<string, unknown>;
+    const hazardValue = getTropicalCycloneHazardValue(properties);
+
+    if (hazardValue !== null) {
+      hazardValues.push(hazardValue);
+    }
+
+    const hazardClass = String(properties.hazard_class || "");
+    if (hazardClass) {
+      classCounts[hazardClass] = (classCounts[hazardClass] ?? 0) + 1;
+    }
+
+    if (hazardClass === "high" || hazardClass === "very_high") {
+      highHazardCellCount += 1;
+    }
+
+    if (hazardClass === "very_high") {
+      veryHighHazardCellCount += 1;
+    }
+  });
+
+  if (features.length === 0) return null;
+
+  const dominantHazardClass =
+    Object.entries(classCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  return {
+    featureCount: features.length,
+    meanHazard:
+      hazardValues.length > 0
+        ? hazardValues.reduce((sum, value) => sum + value, 0) / hazardValues.length
+        : null,
+    maxHazard: hazardValues.length > 0 ? Math.max(...hazardValues) : null,
+    highHazardCellCount,
+    veryHighHazardCellCount,
+    dominantHazardClass,
+  };
+}
+
+function formatHazardValue(value: unknown, fallback = "—"): string {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return fallback;
+
+  return numberValue.toFixed(4);
+}
+
+function getClimateWindowSliderConfig(timeWindow: ClimateTimeWindow): {
+  min: number;
+  max: number;
+  step: number;
+} {
+  if (timeWindow === "decade") {
+    return { min: 2020, max: 2090, step: 10 };
+  }
+
+  if (timeWindow === "5_year") {
+    return { min: 2015, max: 2095, step: 5 };
+  }
+
+  return { min: 2015, max: 2100, step: 1 };
+}
+
+function normalizeClimateYearForWindow(
+  year: number,
+  timeWindow: ClimateTimeWindow,
+): number {
+  const { min, max, step } = getClimateWindowSliderConfig(timeWindow);
+  const clamped = Math.max(min, Math.min(max, year));
+
+  if (step <= 1) return clamped;
+
+  return min + Math.round((clamped - min) / step) * step;
+}
+
+function getClimateWindowLabel(
+  timeWindow: ClimateTimeWindow,
+  year: number,
+): string {
+  if (timeWindow === "decade") {
+    return `${year}-${year + 9}`;
+  }
+
+  if (timeWindow === "5_year") {
+    return `${year}-${year + 4}`;
+  }
+
+  return String(year);
+}
+
+function getClimateTimeWindowLabel(timeWindow: ClimateTimeWindow): string {
+  if (timeWindow === "decade") return "Decade";
+  if (timeWindow === "5_year") return "5-year";
+  return "Yearly";
+}
+
+function getClimateScenarioLabel(scenario: ClimateScenario): string {
+  if (scenario === "ssp245") return "SSP2-4.5";
+  return "SSP5-8.5";
+}
+
+function getClimateScenarioShortLabel(scenario: ClimateScenario): string {
+  if (scenario === "ssp245") return "Moderate emissions";
+  return "High emissions";
 }
 
 function getAssetTypeLabel(assetType: unknown): string {
@@ -903,10 +1199,32 @@ const MapCanvas = ({
   const [h3Resolution, setH3Resolution] = useState(
     initialAnalysisSettings.h3Resolution,
   );
+  const [climateYear, setClimateYear] = useState(2030);
+  const [climateScenario, setClimateScenario] =
+    useState<ClimateScenario>("ssp585");
+  const [climateTimeWindow, setClimateTimeWindow] =
+    useState<ClimateTimeWindow>("yearly");
+  const [climateIndexFeatures, setClimateIndexFeatures] = useState<
+    GeoJSON.Feature[]
+  >([]);
+  const [climateLayerMetadata, setClimateLayerMetadata] = useState<
+    Record<string, unknown> | null
+  >(null);
+  const [climateLayerError, setClimateLayerError] = useState<string | null>(null);
+  const [isClimateLayerLoading, setIsClimateLayerLoading] = useState(false);
+  const [tropicalCycloneHazardFeatures, setTropicalCycloneHazardFeatures] =
+    useState<GeoJSON.Feature[]>([]);
+  const [tropicalCycloneHazardMetadata, setTropicalCycloneHazardMetadata] =
+    useState<Record<string, unknown> | null>(null);
+  const [tropicalCycloneHazardError, setTropicalCycloneHazardError] =
+    useState<string | null>(null);
+  const [isTropicalCycloneHazardLoading, setIsTropicalCycloneHazardLoading] =
+    useState(false);
 
   const manualHeatThresholdRef = useRef(initialAnalysisSettings.heatThreshold);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
   const didInitializeHeatLayerRef = useRef(false);
+  const climateScopeKeyRef = useRef<string | null>(null);
 
   const selectedCountry =
     regions.find((country) => country.country_id === selectedCountryId) ?? null;
@@ -920,6 +1238,23 @@ const MapCanvas = ({
   );
   const currentActiveLayer = activeLayer as MapLayer;
   const activeAnalysisGeometry = selectedArea?.geometry ?? drawnGeometry;
+  const climateLayerScopeLabel = selectedArea
+    ? selectedArea.adminName
+    : selectedCountry?.countryName || "Fiji";
+  const tropicalCycloneScopeLabel = selectedArea
+    ? selectedArea.adminName
+    : selectedCountry?.countryName || "Fiji";
+  const climateWindowSliderConfig = useMemo(
+    () => getClimateWindowSliderConfig(climateTimeWindow),
+    [climateTimeWindow],
+  );
+  const climateWindowLabel = getClimateWindowLabel(
+    climateTimeWindow,
+    climateYear,
+  );
+  const selectedAreaScopeKey = selectedArea
+    ? `${selectedArea.countryId}:${selectedArea.adminLevel}:${selectedArea.adminId}`
+    : "country";
   const boundaryLayerReady = boundaryLoad.status === "ready";
   const hasHeatResult =
     queryMetadata?.analysis_type === "manual_heat_risk" ||
@@ -950,9 +1285,23 @@ const MapCanvas = ({
     !isLoadingAssets &&
     !isQuerying &&
     (selectedAsset !== null || hasTypedAssetQuery);
+  const hasClimateIndexLayer = climateIndexFeatures.length > 0;
+  const climateLayerSummary = useMemo(
+    () => computeClimateLayerSummary(climateIndexFeatures),
+    [climateIndexFeatures],
+  );
+  const hasTropicalCycloneHazardLayer = tropicalCycloneHazardFeatures.length > 0;
+  const tropicalCycloneHazardSummary = useMemo(
+    () => computeTropicalCycloneHazardSummary(tropicalCycloneHazardFeatures),
+    [tropicalCycloneHazardFeatures],
+  );
 
   const highlightedFeaturesForMap = useMemo(() => {
-    const baseFeatures = highlightedFeatures ?? [];
+    const baseFeatures = hasTropicalCycloneHazardLayer
+      ? tropicalCycloneHazardFeatures
+      : hasClimateIndexLayer
+        ? climateIndexFeatures
+        : highlightedFeatures ?? [];
 
     if (!showInfrastructureAssets || assetOptions.length === 0) {
       return baseFeatures;
@@ -975,7 +1324,50 @@ const MapCanvas = ({
     );
 
     return [...baseFeatures, ...cachedAssetFeatures];
-  }, [assetOptions, highlightedFeatures, showInfrastructureAssets]);
+  }, [
+    assetOptions,
+    climateIndexFeatures,
+    hasClimateIndexLayer,
+    hasTropicalCycloneHazardLayer,
+    highlightedFeatures,
+    tropicalCycloneHazardFeatures,
+    showInfrastructureAssets,
+  ]);
+
+  useEffect(() => {
+    if (climateScopeKeyRef.current === null) {
+      climateScopeKeyRef.current = selectedAreaScopeKey;
+      return;
+    }
+
+    if (climateScopeKeyRef.current === selectedAreaScopeKey) return;
+
+    climateScopeKeyRef.current = selectedAreaScopeKey;
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(
+      "Selected area changed. Click Show TX90p layer to reload the climate layer for the current scope.",
+    );
+    setTropicalCycloneHazardFeatures([]);
+    setTropicalCycloneHazardMetadata(null);
+    setTropicalCycloneHazardError(
+      "Selected area changed. Click Show TC hazard layer to reload for the current scope.",
+    );
+  }, [selectedAreaScopeKey]);
+
+  useEffect(() => {
+    setClimateYear((currentYear) =>
+      normalizeClimateYearForWindow(currentYear, climateTimeWindow),
+    );
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+  }, [climateTimeWindow]);
+
+  useEffect(() => {
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
+  }, [climateScenario]);
 
   useEffect(() => {
     manualHeatThresholdRef.current = manualHeatThreshold;
@@ -1102,6 +1494,12 @@ const MapCanvas = ({
     setSelectedAssetId("");
     setAssetLookupText("");
     setAssetLookupError(null);
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
+    setTropicalCycloneHazardFeatures([]);
+    setTropicalCycloneHazardMetadata(null);
+    setTropicalCycloneHazardError(null);
     clearSpatialQuery();
     onDrawGeometry(null);
   }, [selectedCountryId]);
@@ -1197,6 +1595,12 @@ const MapCanvas = ({
 
       setActiveLayer("manual_heat_risk" as never);
       setShowGlobalDataset(false);
+      setClimateIndexFeatures([]);
+      setClimateLayerMetadata(null);
+      setClimateLayerError(null);
+      setTropicalCycloneHazardFeatures([]);
+      setTropicalCycloneHazardMetadata(null);
+      setTropicalCycloneHazardError(null);
 
       runSpatialQuery(
         geometry,
@@ -1249,6 +1653,9 @@ const MapCanvas = ({
 
     setActiveLayer("manual_heat_risk" as never);
     setShowGlobalDataset(false);
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
     setShowPopulationOverlay(true);
     setShowInfrastructureAssets(true);
 
@@ -1278,6 +1685,141 @@ const MapCanvas = ({
     setActiveLayer,
     setShowGlobalDataset,
   ]);
+  const handleRunClimateIndexLayer = useCallback(async () => {
+    popupRef.current?.remove();
+    popupRef.current = null;
+
+    if (selectedCountryId !== "fji") {
+      setClimateLayerError(
+        "The NEX TX90p cache is currently built for Fiji only. Switch Country / territory to Fiji.",
+      );
+      return;
+    }
+
+    setIsClimateLayerLoading(true);
+    setClimateLayerError(null);
+    setTropicalCycloneHazardFeatures([]);
+    setTropicalCycloneHazardMetadata(null);
+    setTropicalCycloneHazardError(null);
+    setActiveLayer("manual_heat_risk" as never);
+    setShowGlobalDataset(false);
+    clearSpatialQuery();
+
+    try {
+      const layer = await fetchClimateIndexLayer({
+        countryId: "fji",
+        variable: "tasmax",
+        metric: "tx90p",
+        scenario: climateScenario,
+        timeWindow: climateTimeWindow,
+        year: climateYear,
+        h3Resolution: 6,
+        adminLevel: selectedArea?.adminLevel,
+        adminId: selectedArea?.adminId,
+        adminName: selectedArea?.adminName,
+      });
+
+      const features = (layer.features || []).map((feature) => ({
+        ...feature,
+        geometry: unwrapGeometryForMapDisplay(feature.geometry) ?? feature.geometry,
+        properties: {
+          ...(feature.properties || {}),
+          layer_name: feature.properties?.layer_name ?? "Climate TX90p",
+        },
+      }));
+
+      setClimateIndexFeatures(features);
+      setClimateLayerMetadata({
+        ...(layer.metadata || {}),
+        ...(layer.api_metadata || {}),
+        time_window: climateTimeWindow,
+        scenario: climateScenario,
+        scenario_label: getClimateScenarioLabel(climateScenario),
+        year_label:
+          layer.metadata?.year_label ??
+          getClimateWindowLabel(climateTimeWindow, climateYear),
+        feature_count: layer.metadata?.feature_count ?? features.length,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setClimateIndexFeatures([]);
+      setClimateLayerMetadata(null);
+      setClimateLayerError(message);
+    } finally {
+      setIsClimateLayerLoading(false);
+    }
+  }, [
+    clearSpatialQuery,
+    climateScenario,
+    climateTimeWindow,
+    climateYear,
+    selectedArea,
+    selectedCountryId,
+    setActiveLayer,
+    setShowGlobalDataset,
+  ]);
+
+  const handleRunTropicalCycloneHazardLayer = useCallback(async (scope: "selected" | "pict" = "selected") => {
+    popupRef.current?.remove();
+    popupRef.current = null;
+
+    setIsTropicalCycloneHazardLoading(true);
+    setTropicalCycloneHazardError(null);
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
+    setActiveLayer("manual_heat_risk" as never);
+    setShowGlobalDataset(false);
+    clearSpatialQuery();
+
+    const requestCountryId = scope === "pict" ? "pict" : selectedCountryId;
+    const requestAdminLevel = scope === "selected" ? selectedArea?.adminLevel : undefined;
+    const requestAdminId = scope === "selected" ? selectedArea?.adminId : undefined;
+    const requestAdminName = scope === "selected" ? selectedArea?.adminName : undefined;
+
+    try {
+      const layer = await fetchTropicalCycloneHazardLayer({
+        countryId: requestCountryId,
+        layerId: "tc_hazard",
+        adminLevel: requestAdminLevel,
+        adminId: requestAdminId,
+        adminName: requestAdminName,
+      });
+
+      const features = (layer.features || []).map((feature) => ({
+        ...feature,
+        geometry: unwrapGeometryForMapDisplay(feature.geometry) ?? feature.geometry,
+        properties: {
+          ...(feature.properties || {}),
+          layer_name: feature.properties?.layer_name ?? "Tropical Cyclone Hazard",
+          hazard_family: feature.properties?.hazard_family ?? "tropical_cyclone",
+        },
+      }));
+
+      setTropicalCycloneHazardFeatures(features);
+      setTropicalCycloneHazardMetadata({
+        ...(layer.metadata || {}),
+        ...(layer.api_metadata || {}),
+        feature_count: layer.metadata?.feature_count ?? features.length,
+        display_scope: scope === "pict" ? "PICT region" : tropicalCycloneScopeLabel,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTropicalCycloneHazardFeatures([]);
+      setTropicalCycloneHazardMetadata(null);
+      setTropicalCycloneHazardError(message);
+    } finally {
+      setIsTropicalCycloneHazardLoading(false);
+    }
+  }, [
+    clearSpatialQuery,
+    selectedArea,
+    selectedCountryId,
+    setActiveLayer,
+    setShowGlobalDataset,
+    tropicalCycloneScopeLabel,
+  ]);
+
 
   useEffect(() => {
     if (!mapboxMap) {
@@ -1668,6 +2210,12 @@ const MapCanvas = ({
     }
 
     setSelectedArea(null);
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
+    setTropicalCycloneHazardFeatures([]);
+    setTropicalCycloneHazardMetadata(null);
+    setTropicalCycloneHazardError(null);
     setActiveLayer("manual_heat_risk" as never);
     setShowGlobalDataset(false);
     clearSpatialQuery();
@@ -1700,6 +2248,12 @@ const MapCanvas = ({
     setSelectedAssetId("");
     setAssetLookupText("");
     setAssetLookupError(null);
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
+    setTropicalCycloneHazardFeatures([]);
+    setTropicalCycloneHazardMetadata(null);
+    setTropicalCycloneHazardError(null);
     setBoundaryLoadAttempt((attempt) => attempt + 1);
     clearSpatialQuery();
     onDrawGeometry(null);
@@ -1717,6 +2271,12 @@ const MapCanvas = ({
     setHeatDisplayMode(defaults.heatDisplayMode);
     setShowPopulationOverlay(defaults.showPopulationOverlay);
     setShowInfrastructureAssets(defaults.showInfrastructureAssets);
+    setClimateIndexFeatures([]);
+    setClimateLayerMetadata(null);
+    setClimateLayerError(null);
+    setTropicalCycloneHazardFeatures([]);
+    setTropicalCycloneHazardMetadata(null);
+    setTropicalCycloneHazardError(null);
     setSelectedArea(null);
     setAssetOptions([]);
     setSelectedAssetId("");
@@ -1756,23 +2316,31 @@ const MapCanvas = ({
 
           <MapControls map={mapboxMap} />
 
-          {isQuerying && (
+          {(isQuerying || isClimateLayerLoading || isTropicalCycloneHazardLoading) && (
             <div className="pointer-events-none absolute left-1/2 top-5 z-[1200] -translate-x-1/2 rounded-2xl border border-black/5 bg-white/95 px-4 py-3 shadow-lg backdrop-blur-md">
               <div className="flex items-center gap-3">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
                 <div>
                   <div className="text-xs font-bold text-neutral-900">
-                    Running spatial analysis
+                    {isTropicalCycloneHazardLoading
+                      ? "Loading TC hazard"
+                      : isClimateLayerLoading
+                        ? "Loading climate index"
+                        : "Running spatial analysis"}
                   </div>
                   <div className="text-[10px] font-medium text-neutral-500">
-                    Fetching forecast spread and population...
+                    {isTropicalCycloneHazardLoading
+                      ? "Fetching precomputed EMPIRIC_TC grid..."
+                      : isClimateLayerLoading
+                        ? "Fetching precomputed NEX TX90p ensemble..."
+                        : "Fetching forecast spread and population..."}
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {(selectedArea || highlightedFeatures?.length) && (
+          {(selectedArea || highlightedFeatures?.length || hasClimateIndexLayer || hasTropicalCycloneHazardLayer) && (
             <button
               onClick={handleClearAnalysis}
               className="absolute right-4 top-4 z-[1200] rounded-xl border border-black/5 bg-white/95 px-3 py-2 text-xs font-bold text-neutral-700 shadow-lg backdrop-blur-md hover:bg-neutral-100"
@@ -1964,17 +2532,24 @@ const MapCanvas = ({
                     Active analysis
                   </div>
                   <div className="mt-1 text-sm font-bold text-neutral-950">
-                    Heat exposure
+                    {hasTropicalCycloneHazardLayer
+                      ? "Tropical cyclone hazard"
+                      : hasClimateIndexLayer
+                        ? "Climate TX90p"
+                        : "Heat exposure"}
                   </div>
                   <p className="mt-1 text-[10px] leading-snug text-neutral-500">
-                    Heat is the default workflow. Select a country, admin scale,
-                    and area, then run heat risk or analyze an infrastructure
-                    asset.
+                    {hasTropicalCycloneHazardLayer
+                      ? "Showing precomputed EMPIRIC_TC tropical-cyclone hazard on the native 0.5° grid for the current map scope."
+                      : hasClimateIndexLayer
+                        ? "Showing precomputed NEX-GDDP-CMIP6 ensemble TX90p for the current map scope. Colors use a bivariate TX90p risk × model reliability matrix."
+                        : "Heat is the default workflow. Select a country, admin scale, and area, then run heat risk or analyze an infrastructure asset."}
                   </p>
                 </div>
 
                 {currentActiveLayer === "manual_heat_risk" && (
                   <div className="mt-3 space-y-3">
+                    {!hasClimateIndexLayer && !hasTropicalCycloneHazardLayer && (
                     <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
                       <div className="flex items-center gap-2">
                         <label className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
@@ -2044,6 +2619,420 @@ const MapCanvas = ({
                           )}
                         </div>
                       )}
+                    </div>
+                    )}
+
+                    <div className="rounded-xl border border-red-100 bg-red-50 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-red-500">
+                            Climate indices
+                          </div>
+                          <div className="mt-1 text-sm font-bold text-red-950">
+                            TX90p · {getClimateScenarioLabel(climateScenario)}
+                          </div>
+                          <div className="mt-1 text-[10px] font-medium text-red-700">
+                            Scope: {climateLayerScopeLabel}
+                          </div>
+                        </div>
+
+                        {hasClimateIndexLayer && (
+                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-red-700">
+                            loaded
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-white/70 p-1">
+                        {(["ssp245", "ssp585"] as ClimateScenario[]).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => setClimateScenario(option)}
+                            className={`rounded-md px-1.5 py-1 text-[9px] font-bold transition ${
+                              climateScenario === option
+                                ? "bg-red-700 text-white shadow-sm"
+                                : "text-red-700 hover:bg-red-50"
+                            }`}
+                            title={getClimateScenarioShortLabel(option)}
+                          >
+                            {getClimateScenarioLabel(option)}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg bg-white/70 p-1">
+                        {(["yearly", "5_year", "decade"] as ClimateTimeWindow[]).map(
+                          (option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => setClimateTimeWindow(option)}
+                              className={`rounded-md px-1.5 py-1 text-[9px] font-bold transition ${
+                                climateTimeWindow === option
+                                  ? "bg-red-700 text-white shadow-sm"
+                                  : "text-red-700 hover:bg-red-50"
+                              }`}
+                            >
+                              {getClimateTimeWindowLabel(option)}
+                            </button>
+                          ),
+                        )}
+                      </div>
+
+                      <label className="mt-3 block">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-red-700">
+                          <span>{getClimateTimeWindowLabel(climateTimeWindow)} period</span>
+                          <span>{climateWindowLabel}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={climateWindowSliderConfig.min}
+                          max={climateWindowSliderConfig.max}
+                          step={climateWindowSliderConfig.step}
+                          value={climateYear}
+                          onChange={(event) =>
+                            setClimateYear(
+                              normalizeClimateYearForWindow(
+                                Number(event.target.value),
+                                climateTimeWindow,
+                              ),
+                            )
+                          }
+                          className="mt-2 w-full cursor-pointer accent-red-700"
+                        />
+                      </label>
+
+                      <button
+                        onClick={handleRunClimateIndexLayer}
+                        disabled={isClimateLayerLoading || selectedCountryId !== "fji"}
+                        className="mt-3 w-full rounded-lg bg-red-700 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-200"
+                      >
+                        {isClimateLayerLoading
+                          ? "Loading TX90p..."
+                          : selectedArea
+                            ? `Show ${getClimateTimeWindowLabel(climateTimeWindow)} TX90p for selected area`
+                            : `Show Fiji ${getClimateTimeWindowLabel(climateTimeWindow)} TX90p`}
+                      </button>
+
+                      {selectedCountryId !== "fji" && (
+                        <p className="mt-2 text-[10px] leading-snug text-red-700">
+                          The climate-index cache is currently built for Fiji only.
+                        </p>
+                      )}
+
+                      {selectedCountryId === "fji" && !selectedArea && (
+                        <p className="mt-2 text-[10px] leading-snug text-red-700">
+                          No province/tikina selected: this will show the full Fiji climate layer.
+                        </p>
+                      )}
+
+                      {climateLayerError && (
+                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-red-700">
+                          {climateLayerError}
+                        </p>
+                      )}
+
+                      {climateLayerMetadata && (
+                        <div className="mt-2 rounded-lg bg-white/85 p-2 text-[10px] leading-snug text-red-800">
+                          <span className="font-bold">Current:</span>{" "}
+                          {formatMetadataValue(
+                            climateLayerMetadata.admin_name,
+                            climateLayerScopeLabel,
+                          )}
+                          {" · "}
+                          {formatMetadataValue(
+                            climateLayerMetadata.scenario_label,
+                            getClimateScenarioLabel(climateScenario),
+                          )}
+                          {" · "}
+                          {formatMetadataValue(
+                            climateLayerMetadata.year_label,
+                            climateWindowLabel,
+                          )}
+                          {" · "}
+                          {formatMetadataValue(
+                            climateLayerMetadata.time_window,
+                            climateTimeWindow,
+                          )}
+                          {" · "}
+                          {formatCompactNumber(climateLayerMetadata.feature_count)} cells
+                          {climateLayerMetadata.full_country_feature_count !== undefined && (
+                            <>
+                              {" / "}
+                              {formatCompactNumber(
+                                climateLayerMetadata.full_country_feature_count,
+                              )}{" "}
+                              country cells
+                            </>
+                          )}
+                          {" · "}
+                          {formatMetadataValue(
+                            climateLayerMetadata.model_count_requested,
+                            "5",
+                          )} models
+                        </div>
+                      )}
+
+                      {climateLayerSummary && (
+                        <div className="mt-2 rounded-lg bg-white/90 p-2 text-[10px] leading-snug text-red-900">
+                          <div className="font-bold uppercase tracking-wide text-red-600">
+                            Climate summary
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-1">
+                            <div className="rounded-md bg-red-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-red-400">
+                                Mean TX90p
+                              </div>
+                              <div className="text-sm font-bold text-red-950">
+                                {formatClimatePercent(climateLayerSummary.meanTx90p)}
+                              </div>
+                            </div>
+
+                            <div className="rounded-md bg-red-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-red-400">
+                                Max TX90p
+                              </div>
+                              <div className="text-sm font-bold text-red-950">
+                                {formatClimatePercent(climateLayerSummary.maxTx90p)}
+                              </div>
+                            </div>
+
+                            <div className="rounded-md bg-red-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-red-400">
+                                Reliability
+                              </div>
+                              <div className="text-sm font-bold text-red-950">
+                                {formatReliabilityValue(
+                                  climateLayerSummary.meanReliability,
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="rounded-md bg-red-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-red-400">
+                                Model spread
+                              </div>
+                              <div className="text-sm font-bold text-red-950">
+                                {formatClimatePercent(
+                                  climateLayerSummary.meanUncertaintySpread,
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 space-y-1 rounded-md bg-red-50 p-1.5 text-[9px] font-semibold text-red-800">
+                            <div className="flex justify-between gap-2">
+                              <span>High-risk cells</span>
+                              <span>{formatCompactNumber(climateLayerSummary.highRiskCellCount)}</span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span>High risk + high reliability</span>
+                              <span>
+                                {formatCompactNumber(
+                                  climateLayerSummary.highRiskHighReliabilityCellCount,
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span>High risk + low reliability</span>
+                              <span>
+                                {formatCompactNumber(
+                                  climateLayerSummary.highRiskLowReliabilityCellCount,
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span>Dominant class</span>
+                              <span className="text-right">
+                                {formatClimateClass(
+                                  climateLayerSummary.dominantBivariateClass,
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 rounded-lg bg-white/85 p-2">
+                        <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-wide text-red-700">
+                          <span>Unreliable</span>
+                          <span>Reliable</span>
+                        </div>
+
+                        <div className="grid grid-cols-[auto_1fr] gap-2">
+                          <div className="flex items-center">
+                            <div className="-rotate-90 whitespace-nowrap text-[9px] font-bold uppercase tracking-wide text-red-700">
+                              TX90p risk
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-md border border-white/80">
+                            {["#84280f", "#c2410c", "#ff6b00", "#763d1f", "#b56825", "#f59e0b", "#553642", "#94705c", "#ddb579", "#302354", "#6750a4", "#a58af0", "#21164f", "#46328c", "#7c6bd6"].map(
+                              (color) => (
+                                <div
+                                  key={color}
+                                  className="h-4"
+                                  style={{ backgroundColor: color }}
+                                />
+                              ),
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-1 flex justify-between text-[9px] font-semibold text-red-700">
+                          <span>low</span>
+                          <span>Reliability score</span>
+                          <span>high</span>
+                        </div>
+
+                        <p className="mt-2 text-[10px] leading-snug text-red-700">
+                          Each cell color combines TX90p risk class with reliability.
+                          Higher/rightward reliability means lower model spread.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-rose-100 bg-rose-50 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-rose-500">
+                            Tropical cyclone hazard
+                          </div>
+                          <div className="mt-1 text-sm font-bold text-rose-950">
+                            EMPIRIC_TC · 0.5° grid
+                          </div>
+                          <div className="mt-1 text-[10px] font-medium text-rose-700">
+                            Scope: {formatMetadataValue(tropicalCycloneHazardMetadata?.display_scope, tropicalCycloneScopeLabel)}
+                          </div>
+                        </div>
+
+                        {hasTropicalCycloneHazardLayer && (
+                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-rose-700">
+                            loaded
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRunTropicalCycloneHazardLayer("selected")}
+                        disabled={isTropicalCycloneHazardLoading}
+                        className="mt-3 w-full rounded-lg bg-rose-700 px-3 py-2 text-[10px] font-bold text-white shadow-sm transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:bg-rose-200"
+                      >
+                        {isTropicalCycloneHazardLoading
+                          ? "Loading TC hazard..."
+                          : selectedArea
+                            ? "Show TC hazard for selected area"
+                            : `Show ${selectedCountry?.countryName || "country"} TC hazard`}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRunTropicalCycloneHazardLayer("pict")}
+                        disabled={isTropicalCycloneHazardLoading}
+                        className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-[10px] font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Show all-PICT TC hazard
+                      </button>
+
+                      {!selectedArea && (
+                        <p className="mt-2 text-[10px] leading-snug text-rose-700">
+                          No admin area selected: this will show the full selected-country TC layer.
+                        </p>
+                      )}
+
+                      {tropicalCycloneHazardError && (
+                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-rose-700">
+                          {tropicalCycloneHazardError}
+                        </p>
+                      )}
+
+                      {tropicalCycloneHazardMetadata && (
+                        <div className="mt-2 rounded-lg bg-white/85 p-2 text-[10px] leading-snug text-rose-800">
+                          <span className="font-bold">Current:</span>{" "}
+                          {formatMetadataValue(
+                            tropicalCycloneHazardMetadata.admin_name,
+                            tropicalCycloneScopeLabel,
+                          )}
+                          {" · "}
+                          {formatCompactNumber(tropicalCycloneHazardMetadata.feature_count)} cells
+                          {tropicalCycloneHazardMetadata.full_country_feature_count !== undefined && (
+                            <>
+                              {" / "}
+                              {formatCompactNumber(
+                                tropicalCycloneHazardMetadata.full_country_feature_count,
+                              )}{" "}
+                              country cells
+                            </>
+                          )}
+                          {" · "}
+                          {formatMetadataValue(
+                            tropicalCycloneHazardMetadata.grid_resolution_degrees,
+                            "0.5",
+                          )}° grid
+                        </div>
+                      )}
+
+                      {tropicalCycloneHazardSummary && (
+                        <div className="mt-2 rounded-lg bg-white/90 p-2 text-[10px] leading-snug text-rose-900">
+                          <div className="font-bold uppercase tracking-wide text-rose-600">
+                            TC summary
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-1">
+                            <div className="rounded-md bg-rose-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-rose-400">
+                                Mean hazard
+                              </div>
+                              <div className="text-sm font-bold text-rose-950">
+                                {formatHazardValue(tropicalCycloneHazardSummary.meanHazard)}
+                              </div>
+                            </div>
+
+                            <div className="rounded-md bg-rose-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-rose-400">
+                                Max hazard
+                              </div>
+                              <div className="text-sm font-bold text-rose-950">
+                                {formatHazardValue(tropicalCycloneHazardSummary.maxHazard)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 space-y-1 rounded-md bg-rose-50 p-1.5 text-[9px] font-semibold text-rose-800">
+                            <div className="flex justify-between gap-2">
+                              <span>High/very-high cells</span>
+                              <span>{formatCompactNumber(tropicalCycloneHazardSummary.highHazardCellCount)}</span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span>Very-high cells</span>
+                              <span>{formatCompactNumber(tropicalCycloneHazardSummary.veryHighHazardCellCount)}</span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span>Dominant class</span>
+                              <span>{formatClimateClass(tropicalCycloneHazardSummary.dominantHazardClass)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 rounded-lg bg-white/85 p-2">
+                        <div className="mb-1 flex justify-between text-[9px] font-bold uppercase tracking-wide text-rose-700">
+                          <span>Low</span>
+                          <span>TC hazard value</span>
+                          <span>High</span>
+                        </div>
+                        <div className="grid grid-cols-6 overflow-hidden rounded-md border border-white/80">
+                          {["#fff7ed", "#fed7aa", "#fdba74", "#fb923c", "#c2410c", "#7f1d1d"].map((color) => (
+                            <div key={color} className="h-4" style={{ backgroundColor: color }} />
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[10px] leading-snug text-rose-700">
+                          Color shows the uploaded EMPIRIC_TC tropical-cyclone hazard value on native 0.5° cells. Exact return-period/unit label is pending corrected source export.
+                        </p>
+                      </div>
                     </div>
 
                     <div className="rounded-xl border border-neutral-100 bg-white p-3">

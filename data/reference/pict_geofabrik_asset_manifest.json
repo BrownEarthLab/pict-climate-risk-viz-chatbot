@@ -1,0 +1,41 @@
+{
+  "created_at": "2026-07-22T21:59:03.910210+00:00",
+  "method": "geofabrik_gpkg_offline_assets",
+  "paths": {
+    "reference_dir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/reference/pict",
+    "cache_dir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/backend/cache/admin_assets",
+    "osm_dir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/osm/geofabrik"
+  },
+  "results": [
+    {
+      "country_iso3": "FJI",
+      "country_name": "Fiji",
+      "slug": "fiji",
+      "status": "ready",
+      "errors": [],
+      "gpkg_path": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/osm/geofabrik/fiji/fiji.gpkg",
+      "raw_asset_count": 551,
+      "country_asset_count": 431,
+      "country_cache_status": "written",
+      "country_cache_path": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/backend/cache/admin_assets/adm0_fji_adm0_country_critical_facility_hospital_port_power_substation_school.json",
+      "admin_summaries": {
+        "adm1": {
+          "admin_count": 4,
+          "written_count": 4,
+          "skipped_count": 0,
+          "zero_asset_count": 0,
+          "total_asset_assignments": 344,
+          "status": "ready"
+        },
+        "adm2": {
+          "admin_count": 15,
+          "written_count": 15,
+          "skipped_count": 0,
+          "zero_asset_count": 1,
+          "total_asset_assignments": 426,
+          "status": "ready"
+        }
+      }
+    }
+  ]
+}

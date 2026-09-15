@@ -1,13 +1,36 @@
+# -----------------------------------------------------------------------------
+# Project .gitignore for pict-climate-risk-viz-chatbot
+# Keep source code, lightweight reference/catalog files, and scripts in git.
+# Keep generated caches, raw climate downloads, local builds, and secrets out.
+# -----------------------------------------------------------------------------
+
 # -----------------------------
-# Node / frontend
+# Node / JavaScript dependencies
 # -----------------------------
 node_modules/
 frontend/node_modules/
 backend/node_modules/
-dist/
+.npm/
+.pnpm-store/
+.yarn/
+
+# -----------------------------
+# Frontend/backend build outputs
+# -----------------------------
 frontend/dist/
+dist/
+build/
+coverage/
 .vite/
-.cache/
+
+# -----------------------------
+# Logs
+# -----------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # -----------------------------
 # Environment / secrets
@@ -15,64 +38,113 @@ frontend/dist/
 .env
 .env.*
 !.env.example
+!.env.template
+*.pem
+*.key
+*.crt
+secrets/
 
 # -----------------------------
-# Backend generated caches
+# OS / editor files
 # -----------------------------
-backend/cache/
-backend/cache/**
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # -----------------------------
-# Downloaded / generated PICT data
-# These should be rebuilt with scripts, not pushed.
+# Python local/runtime files
 # -----------------------------
-data/reference/pict/
-data/reference/pict_region_registry.json
-data/reference/pict_bootstrap_manifest*.json
-data/reference/pict_geofabrik_asset_manifest.json
-data/reference/pict_asset_area_retry_manifest.json
-data/osm/
-data/osm/**
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
 
 # -----------------------------
-# Large raster / climate / NetCDF files
+# Raw / large climate data
 # -----------------------------
-*.tif
-*.tiff
+data/climate/raw/
+data/climate/processed/
+data/climate/intermediate/
+data/climate/tmp/
+data/climate/downloads/
+data/climate/manifests/
 *.nc
+*.nc4
+*.cdf
 *.grib
 *.grib2
 *.zarr/
+*.zarr.zip
+
+# -----------------------------
+# Generated backend caches
+# These can still be included in a local Docker image unless also ignored in
+# .dockerignore. .gitignore only controls what git tracks.
+# -----------------------------
+backend/cache/climate_indices/
+backend/cache/tropical_cyclone/
+backend/cache/admin_assets/
+backend/cache/**/*.tif
+backend/cache/**/*.tiff
+backend/cache/**/*.vrt
+backend/cache/**/*.sqlite
+backend/cache/**/*.db
+
+# Keep cache directory placeholders if you add them later
+!backend/cache/.gitkeep
+!backend/cache/**/.gitkeep
+
+# -----------------------------
+# Generated GIS/vector exports
+# -----------------------------
 *.gpkg
-*.gpkg.zip
 *.shp
 *.shx
 *.dbf
 *.prj
 *.cpg
+*.qpj
+*.geojson.tmp
+*.tmp.geojson
 
 # -----------------------------
-# Local script outputs / temp files
+# Temporary archives / local artifacts
 # -----------------------------
-*.part
-*.tmp
-*.log
-.DS_Store
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
 
 # -----------------------------
-# Python
+# Local notebooks / scratch outputs
 # -----------------------------
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
-venv/
-.ipynb_checkpoints/
+scratch/
+tmp/
+temp/
+outputs/
+reports/tmp/
 
 # -----------------------------
-# OS / editor
+# Docker/local runtime artifacts
 # -----------------------------
-.idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+.docker/
+docker-compose.override.yml
+
+
+data/reference/pict/*/worldpop/*.tif
+data/hazards/tropical_cyclone/raw/TC_500_year.asc

@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-22T21:57:59.264Z",
+  "script": "scripts/bootstrap_pict_region_data.mjs",
+  "paths": {
+    "repoRoot": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot",
+    "referenceDir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/reference/pict",
+    "cacheDir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/backend/cache/admin_assets",
+    "publicDir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/frontend/public/pict"
+  },
+  "options": {
+    "countries": [
+      "FJI"
+    ],
+    "admin_levels": [
+      "ADM0",
+      "ADM1",
+      "ADM2"
+    ],
+    "derive_asset_levels": [
+      "ADM1",
+      "ADM2"
+    ],
+    "asset_types": [
+      "critical_facility",
+      "hospital",
+      "port",
+      "power_substation",
+      "school"
+    ],
+    "skip_boundaries": false,
+    "skip_population": true,
+    "skip_assets": true,
+    "copy_to_frontend": false,
+    "delay_ms": 3500,
+    "timeout_seconds": 80,
+    "population_year": 2020,
+    "dry_run": false
+  },
+  "countries": [
+    {
+      "country_iso3": "FJI",
+      "country_name": "Fiji",
+      "reference_dir": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/reference/pict/fji",
+      "boundaries": {
+        "ADM0": {
+          "status": "downloaded",
+          "path": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/reference/pict/fji/adm0.geojson",
+          "feature_count": 1,
+          "metadata_url": "https://www.geoboundaries.org/api/current/gbOpen/FJI/ADM0/",
+          "download_url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/FJI/ADM0/geoBoundaries-FJI-ADM0.geojson"
+        },
+        "ADM1": {
+          "status": "downloaded",
+          "path": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/reference/pict/fji/adm1.geojson",
+          "feature_count": 4,
+          "metadata_url": "https://www.geoboundaries.org/api/current/gbOpen/FJI/ADM1/",
+          "download_url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/FJI/ADM1/geoBoundaries-FJI-ADM1.geojson"
+        },
+        "ADM2": {
+          "status": "downloaded",
+          "path": "/Users/yigitefeenhos/Documents/GitHub/pict-climate-risk-viz-chatbot/data/reference/pict/fji/adm2.geojson",
+          "feature_count": 15,
+          "metadata_url": "https://www.geoboundaries.org/api/current/gbOpen/FJI/ADM2/",
+          "download_url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/FJI/ADM2/geoBoundaries-FJI-ADM2.geojson"
+        }
+      },
+      "population": null,
+      "assets": null,
+      "errors": []
+    }
+  ]
+}

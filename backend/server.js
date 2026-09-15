@@ -17,10 +17,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
+
+function cleanPathSegment(value, fallback = "") {
+  const raw = String(value ?? fallback).trim();
+
+  if (!raw) return fallback;
+
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function readGeoJsonFile(filePath) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  return JSON.parse(raw);
+}
 
 const tasPath = path.resolve(
   __dirname,
@@ -4539,7 +4555,343 @@ app.post("/api/spatial-query", async (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+
+function filterClimateGeoJsonToAdminBoundary(geojson, adminLevel, adminId, countryId) {
+  const resolvedAdmin = resolveAdminBoundary(adminLevel, adminId, countryId);
+  const boundaryGeometry = resolvedAdmin.feature.geometry;
+  const sourceFeatures = Array.isArray(geojson.features) ? geojson.features : [];
+
+  const filteredFeatures = sourceFeatures.filter((feature) => {
+    if (!feature?.geometry) return false;
+
+    const centroid = getFeatureCentroid(feature);
+    return isPointInsideGeometry(centroid, boundaryGeometry);
+  });
+
+  return {
+    ...geojson,
+    metadata: {
+      ...(geojson.metadata || {}),
+      country_id: resolvedAdmin.country_id,
+      country_name: resolvedAdmin.country_name,
+      admin_level: resolvedAdmin.admin_level,
+      normalized_admin_level: resolvedAdmin.normalized_admin_level,
+      admin_id: resolvedAdmin.admin_id,
+      admin_name: resolvedAdmin.admin_name,
+      feature_count: filteredFeatures.length,
+      full_country_feature_count: sourceFeatures.length,
+      spatial_filter: "admin_boundary",
+      spatial_filter_method: "h3_centroid_inside_admin_boundary",
+    },
+    features: filteredFeatures,
+  };
+}
+
+app.get("/api/climate-index", async (req, res) => {
+  try {
+    const countryId = cleanPathSegment(req.query.country_id, "fji");
+    const variable = cleanPathSegment(req.query.variable, "tasmax");
+    const metric = cleanPathSegment(req.query.metric, "tx90p");
+    const scenario = cleanPathSegment(req.query.scenario, "ssp585");
+    const timeWindow = cleanPathSegment(req.query.time_window, "yearly");
+    const h3Resolution = Number(req.query.h3_resolution ?? 6);
+    const requestedAdminLevel = req.query.admin_level
+      ? cleanPathSegment(req.query.admin_level, "")
+      : "";
+    const requestedAdminId = req.query.admin_id
+      ? cleanPathSegment(req.query.admin_id, "")
+      : "";
+
+    const yearRaw = req.query.year;
+
+    if (!yearRaw) {
+      return res.status(400).json({
+        error: "Missing required query parameter: year",
+        example:
+          "/api/climate-index?country_id=fji&variable=tasmax&metric=tx90p&scenario=ssp585&time_window=yearly&year=2030&h3_resolution=6",
+      });
+    }
+
+    const year = Number(yearRaw);
+
+    if (!Number.isInteger(year)) {
+      return res.status(400).json({
+        error: "Invalid year. Expected an integer year like 2030.",
+        received: yearRaw,
+      });
+    }
+
+    if (!Number.isInteger(h3Resolution) || h3Resolution < 0 || h3Resolution > 15) {
+      return res.status(400).json({
+        error: "Invalid h3_resolution. Expected an integer from 0 to 15.",
+        received: req.query.h3_resolution,
+      });
+    }
+
+    const layerMode = cleanPathSegment(req.query.layer_mode, "ensemble");
+
+    let geojsonPath;
+
+    if (layerMode === "ensemble") {
+      geojsonPath = path.resolve(
+        __dirname,
+        "cache",
+        "climate_indices",
+        variable,
+        countryId,
+        `h3_res${h3Resolution}`,
+        metric,
+        "ensemble",
+        timeWindow,
+        `${scenario}_${year}.geojson`
+      );
+    } else if (layerMode === "model") {
+      const model = cleanPathSegment(req.query.model, "");
+
+      if (!model) {
+        return res.status(400).json({
+          error: "Missing required query parameter for model layer: model",
+          example:
+            "/api/climate-index?layer_mode=model&model=access-cm2&scenario=ssp585&year=2030",
+        });
+      }
+
+      geojsonPath = path.resolve(
+        __dirname,
+        "cache",
+        "climate_indices",
+        variable,
+        countryId,
+        `h3_res${h3Resolution}`,
+        metric,
+        "models",
+        model,
+        timeWindow,
+        `${scenario}_${year}.geojson`
+      );
+    } else {
+      return res.status(400).json({
+        error: "Invalid layer_mode. Use 'ensemble' or 'model'.",
+        received: layerMode,
+      });
+    }
+
+    if (!fs.existsSync(geojsonPath)) {
+      return res.status(404).json({
+        error: "Climate index layer not found.",
+        requested: {
+          country_id: countryId,
+          variable,
+          metric,
+          scenario,
+          time_window: timeWindow,
+          year,
+          h3_resolution: h3Resolution,
+          layer_mode: layerMode,
+          admin_level: requestedAdminLevel || null,
+          admin_id: requestedAdminId || null,
+        },
+        expected_path: path.relative(__dirname, geojsonPath),
+        note:
+          "Run scripts/build_nex_tx90p_ensemble_fiji.py first, or check that the requested scenario/year exists.",
+      });
+    }
+
+    let geojson = readGeoJsonFile(geojsonPath);
+
+    if (requestedAdminLevel || requestedAdminId) {
+      if (!requestedAdminLevel || !requestedAdminId) {
+        return res.status(400).json({
+          error:
+            "Both admin_level and admin_id are required for admin-scoped climate-index requests.",
+          received: {
+            admin_level: requestedAdminLevel || null,
+            admin_id: requestedAdminId || null,
+          },
+        });
+      }
+
+      geojson = filterClimateGeoJsonToAdminBoundary(
+        geojson,
+        requestedAdminLevel,
+        requestedAdminId,
+        countryId
+      );
+    }
+
+    return res.json({
+      ...geojson,
+      api_metadata: {
+        endpoint: "/api/climate-index",
+        source_path: path.relative(__dirname, geojsonPath),
+        layer_mode: layerMode,
+        requested: {
+          country_id: countryId,
+          variable,
+          metric,
+          scenario,
+          time_window: timeWindow,
+          year,
+          h3_resolution: h3Resolution,
+          admin_level: requestedAdminLevel || null,
+          admin_id: requestedAdminId || null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Climate index endpoint failed:", error);
+
+    return res.status(500).json({
+      error: "Climate index endpoint failed.",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+
+function filterTropicalCycloneGeoJsonToAdminBoundary(geojson, adminLevel, adminId, countryId) {
+  const resolvedAdmin = resolveAdminBoundary(adminLevel, adminId, countryId);
+  const boundaryGeometry = resolvedAdmin.feature.geometry;
+  const sourceFeatures = Array.isArray(geojson.features) ? geojson.features : [];
+
+  const filteredFeatures = sourceFeatures.filter((feature) => {
+    if (!feature?.geometry) return false;
+
+    const centroid = getFeatureCentroid(feature);
+    return isPointInsideGeometry(centroid, boundaryGeometry);
+  });
+
+  return {
+    ...geojson,
+    metadata: {
+      ...(geojson.metadata || {}),
+      country_id: resolvedAdmin.country_id,
+      country_name: resolvedAdmin.country_name,
+      admin_level: resolvedAdmin.admin_level,
+      normalized_admin_level: resolvedAdmin.normalized_admin_level,
+      admin_id: resolvedAdmin.admin_id,
+      admin_name: resolvedAdmin.admin_name,
+      feature_count: filteredFeatures.length,
+      full_country_feature_count: sourceFeatures.length,
+      spatial_filter: "admin_boundary",
+      spatial_filter_method: "tc_grid_cell_centroid_inside_admin_boundary",
+    },
+    features: filteredFeatures,
+  };
+}
+
+app.get("/api/tropical-cyclone-hazard", async (req, res) => {
+  try {
+    const countryId = cleanPathSegment(req.query.country_id, "fji");
+    const layerId = cleanPathSegment(req.query.layer_id, "tc_hazard");
+    const requestedAdminLevel = req.query.admin_level
+      ? cleanPathSegment(req.query.admin_level, "")
+      : "";
+    const requestedAdminId = req.query.admin_id
+      ? cleanPathSegment(req.query.admin_id, "")
+      : "";
+
+    if (countryId === "pict" && (requestedAdminLevel || requestedAdminId)) {
+      return res.status(400).json({
+        error:
+          "Admin-scoped TC hazard requests require a specific country. Use country_id=fji/wsm/ton/etc., not country_id=pict.",
+        requested: {
+          country_id: countryId,
+          layer_id: layerId,
+          admin_level: requestedAdminLevel || null,
+          admin_id: requestedAdminId || null,
+        },
+      });
+    }
+
+    const geojsonPath = path.resolve(
+      __dirname,
+      "cache",
+      "tropical_cyclone",
+      countryId,
+      `${layerId}.geojson`
+    );
+
+    if (!fs.existsSync(geojsonPath)) {
+      return res.status(404).json({
+        error: "Tropical cyclone hazard layer not found.",
+        requested: {
+          country_id: countryId,
+          layer_id: layerId,
+          admin_level: requestedAdminLevel || null,
+          admin_id: requestedAdminId || null,
+        },
+        expected_path: path.relative(__dirname, geojsonPath),
+        note:
+          "Run scripts/build_tropical_cyclone_hazard_layer.py with --country-id all first, or check that the ASC file was copied into data/hazards/tropical_cyclone/raw/.",
+      });
+    }
+
+    let geojson = readGeoJsonFile(geojsonPath);
+
+    if (requestedAdminLevel || requestedAdminId) {
+      if (!requestedAdminLevel || !requestedAdminId) {
+        return res.status(400).json({
+          error:
+            "Both admin_level and admin_id are required for admin-scoped tropical-cyclone-hazard requests.",
+          received: {
+            admin_level: requestedAdminLevel || null,
+            admin_id: requestedAdminId || null,
+          },
+        });
+      }
+
+      geojson = filterTropicalCycloneGeoJsonToAdminBoundary(
+        geojson,
+        requestedAdminLevel,
+        requestedAdminId,
+        countryId
+      );
+    }
+
+    return res.json({
+      ...geojson,
+      api_metadata: {
+        endpoint: "/api/tropical-cyclone-hazard",
+        source_path: path.relative(__dirname, geojsonPath),
+        layer_id: layerId,
+        requested: {
+          country_id: countryId,
+          layer_id: layerId,
+          admin_level: requestedAdminLevel || null,
+          admin_id: requestedAdminId || null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Tropical cyclone hazard endpoint failed:", error);
+
+    return res.status(500).json({
+      error: "Tropical cyclone hazard endpoint failed.",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+const frontendDistPath = path.resolve(__dirname, "../frontend/dist");
+
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/")) {
+      return next();
+    }
+
+    return res.sendFile(path.join(frontendDistPath, "index.html"));
+  });
+
+  console.log(`Serving frontend from ${frontendDistPath}`);
+} else {
+  console.warn(`Frontend dist not found at ${frontendDistPath}`);
+}
+
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Spatial API server running at http://localhost:${PORT}`);
   void warmAdminAssetCacheOnStartup();
 });

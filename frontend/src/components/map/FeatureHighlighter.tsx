@@ -17,6 +17,8 @@ const DEFAULT_LAYER_DISPLAY_NAMES: Record<string, string> = {
   "Population Exposure Overlay": "Expected Exposed Population",
   "Near-Surface Air Temp (TAS)": "Near-Surface Air Temperature",
   "Annual Mean Wet-Bulb (WBT)": "Annual Mean Wet-Bulb Temperature",
+  "Climate TX90p": "Climate TX90p Projection",
+  "Tropical Cyclone Hazard": "Tropical Cyclone Hazard",
 };
 
 const highlightSourceId = "highlight-source";
@@ -32,6 +34,10 @@ const assetPointLayerId = "manual-heat-risk-assets-points";
 
 const tasFillLayerId = "tas-highlight-fill";
 const wetBulbFillLayerId = "wet-bulb-highlight-fill";
+const climateIndexFillLayerId = "climate-index-tx90p-fill";
+const climateIndexOutlineLayerId = "climate-index-tx90p-outline";
+const tropicalCycloneHazardFillLayerId = "tropical-cyclone-hazard-fill";
+const tropicalCycloneHazardOutlineLayerId = "tropical-cyclone-hazard-outline";
 const genericPointLayerId = "generic-highlight-points";
 const genericLineLayerId = "generic-highlight-lines";
 const genericPolygonLayerId = "generic-highlight-polygons";
@@ -39,6 +45,10 @@ const genericPolygonLayerId = "generic-highlight-polygons";
 const allHighlightLayerIds = [
   tasFillLayerId,
   wetBulbFillLayerId,
+  climateIndexFillLayerId,
+  climateIndexOutlineLayerId,
+  tropicalCycloneHazardFillLayerId,
+  tropicalCycloneHazardOutlineLayerId,
   manualHeatRiskFillLayerId,
   manualHeatRiskOutlineLayerId,
   manualHeatUncertaintyFillLayerId,
@@ -64,6 +74,14 @@ function formatPercent(value: unknown): string {
   if (!Number.isFinite(numberValue)) return "N/A";
 
   return `${(numberValue * 100).toFixed(0)}%`;
+}
+
+function formatPercentDays(value: unknown, digits = 1): string {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) return "N/A";
+
+  return `${numberValue.toFixed(digits)}%`;
 }
 
 function cleanLabel(value: unknown): string {
@@ -132,6 +150,78 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
   const layerName = String(properties.layer_name || "");
   const forecastSpread = getForecastSpread(properties);
   const normalizedForecastSpread = getNormalizedForecastSpread(properties);
+
+  if (layerName === "Tropical Cyclone Hazard" || properties.hazard_family === "tropical_cyclone") {
+    return `
+      <div class="min-w-[260px] font-sans">
+        <div class="mb-1 text-xs font-bold text-neutral-900">
+          Tropical cyclone hazard grid cell
+        </div>
+        <div class="space-y-0.5 text-[11px] text-neutral-700">
+          <div><strong>Hazard value:</strong> ${formatNumber(
+            properties.hazard_value ?? properties.value,
+            4
+          )}</div>
+          <div><strong>Class:</strong> ${cleanLabel(properties.hazard_class)}</div>
+          <div><strong>Grid:</strong> ${formatNumber(
+            properties.grid_resolution_degrees,
+            1
+          )}° cell</div>
+          <div><strong>Source:</strong> ${String(properties.source_dataset || "EMPIRIC_TC")}</div>
+          <div><strong>Cell:</strong> ${String(properties.cell_id || "N/A")}</div>
+          <div><strong>Unit:</strong> ${cleanLabel(properties.unit)}</div>
+        </div>
+        <div class="mt-1 border-t border-neutral-100 pt-1 text-[10px] leading-snug text-neutral-500">
+          Native 0.5° tropical-cyclone grid. Small negative numerical artifacts are clipped to zero.
+        </div>
+      </div>
+    `;
+  }
+
+  if (layerName === "Climate TX90p" || properties.metric === "tx90p") {
+    return `
+      <div class="min-w-[270px] font-sans">
+        <div class="mb-1 text-xs font-bold text-neutral-900">
+          Climate TX90p bivariate H3 hexagon
+        </div>
+        <div class="space-y-0.5 text-[11px] text-neutral-700">
+          <div><strong>Period:</strong> ${String(
+            properties.year_label ||
+              (properties.start_year && properties.end_year
+                ? `${properties.start_year}-${properties.end_year}`
+                : properties.year || "N/A")
+          )}</div>
+          <div><strong>Time window:</strong> ${cleanLabel(properties.time_window || "yearly")}</div>
+          <div><strong>Scenario:</strong> ${String(properties.scenario || properties.experiment || "N/A")}</div>
+          <div><strong>Ensemble mean TX90p:</strong> ${formatPercentDays(
+            properties.ensemble_mean_tx90p ?? properties.tx90p ?? properties.value
+          )}</div>
+          <div><strong>Model spread:</strong> ${formatNumber(
+            properties.uncertainty_spread
+          )} percentage points</div>
+          <div><strong>Reliability score:</strong> ${formatNumber(
+            properties.reliability_score,
+            2
+          )}</div>
+          <div><strong>Risk class:</strong> ${cleanLabel(properties.risk_class)}</div>
+          <div><strong>Reliability class:</strong> ${cleanLabel(
+            properties.reliability_class
+          )}</div>
+          <div><strong>Bivariate class:</strong> ${cleanLabel(
+            properties.bivariate_class
+          )}</div>
+          <div><strong>Models:</strong> ${String(properties.model_count || "N/A")}</div>
+          <div><strong>Baseline:</strong> ${String(properties.baseline_period || "N/A")}</div>
+          <div><strong>H3 resolution:</strong> ${String(
+            properties.h3_resolution || "N/A"
+          )}</div>
+        </div>
+        <div class="mt-1 border-t border-neutral-100 pt-1 text-[10px] leading-snug text-neutral-500">
+          Color comes from a bivariate matrix: vertical axis = TX90p risk, horizontal axis = model reliability.
+        </div>
+      </div>
+    `;
+  }
 
   if (layerName === "Population Exposure Overlay") {
     return `
@@ -461,6 +551,154 @@ const FeatureHighlighter = ({
           "#d946ef",
         ],
         "fill-opacity": 0.5,
+      },
+    });
+
+    addLayerIfMissing({
+      id: climateIndexFillLayerId,
+      type: "fill",
+      source: highlightSourceId,
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "Polygon"],
+        [
+          "any",
+          ["==", ["get", "layer_name"], "Climate TX90p"],
+          ["==", ["get", "metric"], "tx90p"],
+        ],
+      ],
+      paint: {
+        "fill-color": [
+          "match",
+          ["get", "bivariate_class"],
+          "very_low_risk_low_reliability",
+          "#21164f",
+          "very_low_risk_medium_reliability",
+          "#46328c",
+          "very_low_risk_high_reliability",
+          "#7c6bd6",
+          "low_risk_low_reliability",
+          "#302354",
+          "low_risk_medium_reliability",
+          "#6750a4",
+          "low_risk_high_reliability",
+          "#a58af0",
+          "medium_risk_low_reliability",
+          "#553642",
+          "medium_risk_medium_reliability",
+          "#94705c",
+          "medium_risk_high_reliability",
+          "#ddb579",
+          "high_risk_low_reliability",
+          "#763d1f",
+          "high_risk_medium_reliability",
+          "#b56825",
+          "high_risk_high_reliability",
+          "#f59e0b",
+          "very_high_risk_low_reliability",
+          "#84280f",
+          "very_high_risk_medium_reliability",
+          "#c2410c",
+          "very_high_risk_high_reliability",
+          "#ff6b00",
+          "#6750a4",
+        ],
+        "fill-opacity": 0.82,
+      },
+    });
+
+    addLayerIfMissing({
+      id: climateIndexOutlineLayerId,
+      type: "line",
+      source: highlightSourceId,
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "Polygon"],
+        [
+          "any",
+          ["==", ["get", "layer_name"], "Climate TX90p"],
+          ["==", ["get", "metric"], "tx90p"],
+        ],
+      ],
+      paint: {
+        "line-color": "rgba(20,20,20,0.42)",
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5,
+          0.35,
+          8,
+          0.75,
+          11,
+          1.1,
+        ],
+        "line-opacity": 0.8,
+      },
+    });
+
+    addLayerIfMissing({
+      id: tropicalCycloneHazardFillLayerId,
+      type: "fill",
+      source: highlightSourceId,
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "Polygon"],
+        [
+          "any",
+          ["==", ["get", "layer_name"], "Tropical Cyclone Hazard"],
+          ["==", ["get", "hazard_family"], "tropical_cyclone"],
+        ],
+      ],
+      paint: {
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          ["coalesce", ["get", "hazard_value"], ["get", "value"], 0],
+          0,
+          "#fff7ed",
+          0.05,
+          "#fed7aa",
+          0.1,
+          "#fdba74",
+          0.2,
+          "#fb923c",
+          0.4,
+          "#c2410c",
+          0.8,
+          "#7f1d1d",
+        ],
+        "fill-opacity": 0.72,
+      },
+    });
+
+    addLayerIfMissing({
+      id: tropicalCycloneHazardOutlineLayerId,
+      type: "line",
+      source: highlightSourceId,
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "Polygon"],
+        [
+          "any",
+          ["==", ["get", "layer_name"], "Tropical Cyclone Hazard"],
+          ["==", ["get", "hazard_family"], "tropical_cyclone"],
+        ],
+      ],
+      paint: {
+        "line-color": "rgba(80,20,20,0.55)",
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5,
+          0.25,
+          8,
+          0.65,
+          11,
+          1.0,
+        ],
+        "line-opacity": 0.75,
       },
     });
 
@@ -870,6 +1108,10 @@ const FeatureHighlighter = ({
         ["!=", ["get", "layer_name"], "Manual Heat Risk"],
         ["!=", ["get", "layer_name"], "Near-Surface Air Temp (TAS)"],
         ["!=", ["get", "layer_name"], "Annual Mean Wet-Bulb (WBT)"],
+        ["!=", ["get", "layer_name"], "Climate TX90p"],
+        ["!=", ["get", "metric"], "tx90p"],
+        ["!=", ["get", "layer_name"], "Tropical Cyclone Hazard"],
+        ["!=", ["get", "hazard_family"], "tropical_cyclone"],
       ],
       paint: {
         "fill-color": "#00FFFF",
@@ -880,6 +1122,8 @@ const FeatureHighlighter = ({
     [
       tasFillLayerId,
       wetBulbFillLayerId,
+      climateIndexFillLayerId,
+      tropicalCycloneHazardFillLayerId,
       manualHeatRiskFillLayerId,
       manualHeatUncertaintyFillLayerId,
       populationOverlayCircleLayerId,
