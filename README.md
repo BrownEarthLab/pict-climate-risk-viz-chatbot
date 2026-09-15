@@ -1,8 +1,8 @@
 # PICT Climate Risk Visualization Tool — Progress README
 
-The tool is currently an interactive geospatial dashboard for exploring heat exposure, forecast spread/uncertainty, expected exposed population, and infrastructure risk across Pacific Island Countries and Territories (PICTs). 
+The tool is currently an interactive geospatial dashboard for exploring heat exposure, forecast spread/uncertainty, expected exposed population, infrastructure risk, precomputed climate heat indices, and tropical cyclone hazard layers across Pacific Island Countries and Territories (PICTs).
 
-The chatbot layer will later sit on top of the same backend tools.
+The chatbot layer will later sit on top of the same backend tools. For now, the workflow is map-first and deterministic: select a country, select an admin scale, click an admin area, run an analysis, and view map layers plus structured metadata.
 
 ---
 
@@ -15,8 +15,8 @@ The visualization tool helps answer:
 - How many people may be exposed?
 - Which hospitals, schools, ports, substations, or critical facilities are near exposed areas?
 - How does risk change under different heat thresholds, H3 resolutions, and asset buffer distances?
-
-The workflow is map-first and deterministic: select a country, select an admin scale, click an admin area, run an analysis, and view map layers plus structured metadata.
+- How does projected extreme heat change under precomputed climate-index layers?
+- Where are tropical cyclone hazard values highest across Fiji and the wider PICT region?
 
 ---
 
@@ -24,7 +24,7 @@ The workflow is map-first and deterministic: select a country, select an admin s
 
 ### 1. Heat-first map interface
 
-The active controls are:
+The active controls include:
 
 - country / territory,
 - admin scale,
@@ -35,12 +35,25 @@ The active controls are:
 - population overlay,
 - infrastructure overlay,
 - asset lookup,
-- asset buffer distance.
+- asset buffer distance,
+- climate-index controls,
+- tropical cyclone hazard controls.
 
 ### 2. PICT region registry
 
 Current region coverage includes American Samoa, Cook Islands, Fiji, Federated States of Micronesia, Guam, Kiribati, Marshall Islands, Northern Mariana Islands, Nauru, New Caledonia, Niue, Palau, Papua New Guinea, French Polynesia, Solomon Islands, Tokelau, Tonga, Tuvalu, Vanuatu, Wallis and Futuna, and Samoa.
 
+The registry is stored at:
+
+```txt
+data/reference/pict_region_registry.json
+```
+
+Boundary files are stored under:
+
+```txt
+data/reference/pict/<country_id>/
+```
 
 ### 3. Country / territory selector
 
@@ -60,6 +73,8 @@ Admin scales come from the region registry. Countries show available levels such
 ADM0
 ADM1
 ADM2
+Province
+Tikina
 ```
 
 depending on available data.
@@ -92,6 +107,10 @@ H3 7 = detailed
 
 The backend can downgrade overly large live forecast requests to keep analysis practical.
 
+### Forecast spread / uncertainty
+
+Forecast spread is calculated from the hourly apparent-temperature values sampled in each H3 cell and is normalized across the current analysis. It is a cell-level spread measure, not a formal long-term climate-model uncertainty estimate.
+
 ---
 
 ## Population exposure features
@@ -107,6 +126,8 @@ expected exposed population = population × exposure probability
 ### Population overlay
 
 The UI includes an optional expected exposed population overlay.
+
+Population rasters are treated as large local/generated inputs and should normally stay out of git.
 
 ---
 
@@ -149,6 +170,117 @@ Asset heat-risk analysis returns:
 
 ---
 
+## Climate-index features
+
+The app now supports a precomputed climate-index mode in addition to the live forecast workflow.
+
+### Current implemented climate index
+
+The main implemented climate index is:
+
+```txt
+TX90p
+```
+
+TX90p is interpreted in this project as the share/percent of days exceeding the local historical 90th percentile of daily maximum temperature.
+
+Current projection source:
+
+```txt
+NEX-GDDP-CMIP6 daily tasmax
+```
+
+Current baseline:
+
+```txt
+1981–2010
+```
+
+Current supported scenarios:
+
+```txt
+SSP2-4.5
+SSP5-8.5
+```
+
+Current supported time windows:
+
+```txt
+yearly
+5_year
+decade
+```
+
+### Climate-index styling
+
+The current TX90p layer uses a bivariate risk/reliability style:
+
+- value/risk is based on ensemble mean TX90p,
+- reliability is based on inverse normalized inter-model spread,
+- color encodes both risk and reliability,
+- opacity is kept mostly fixed so the layer remains legible.
+
+### Climate-index backend cache
+
+Generated climate-index GeoJSON files are stored under:
+
+```txt
+backend/cache/climate_indices/
+```
+
+Example path:
+
+```txt
+backend/cache/climate_indices/tasmax/fji/h3_res6/tx90p/ensemble/yearly/ssp585_2030.geojson
+```
+
+These generated cache files are large and are not required to be committed. For local Docker testing, make sure the cache files exist before building the image if you want climate layers to work inside the container.
+
+---
+
+## Tropical cyclone hazard features
+
+The app now supports a tropical cyclone hazard layer derived from the EMPIRIC_TC/STORM-style 0.5° South Pacific grid.
+
+### Current implemented TC layer
+
+Only one tropical cyclone layer is currently enabled:
+
+```txt
+TC hazard
+```
+
+The current committed ASC source is:
+
+```txt
+data/hazards/tropical_cyclone/raw/TC_200_year.asc
+```
+
+The previously supplied `TC_500_year.asc` file was byte-identical to `TC_200_year.asc`, so it is intentionally not used as a separate layer until the corrected file is available.
+
+### TC grid handling
+
+The TC layer is displayed at the native 0.5° grid resolution. It should not be upsampled to H3 because that would imply finer precision than the original data supports.
+
+For selected admin areas, the backend/frontend should treat the TC grid as a coarse hazard layer and communicate that the displayed value comes from the original 0.5° cell.
+
+### TC backend cache
+
+Generated TC GeoJSON files are stored under:
+
+```txt
+backend/cache/tropical_cyclone/
+```
+
+Example paths:
+
+```txt
+backend/cache/tropical_cyclone/pict/tc_hazard.geojson
+backend/cache/tropical_cyclone/fji/tc_hazard.geojson
+```
+
+---
+
 ## Frontend UI features
 
 The left control panel includes:
@@ -163,7 +295,9 @@ The left control panel includes:
 - asset lookup,
 - asset buffer setting,
 - expected exposed population toggle,
-- infrastructure assets toggle.
+- infrastructure assets toggle,
+- climate-index controls,
+- tropical cyclone hazard controls.
 
 The right result panel summarizes:
 
@@ -171,6 +305,8 @@ The right result panel summarizes:
 - heat exposure result,
 - H3 cell count,
 - mean exposure probability,
+- climate-index summaries where available,
+- tropical cyclone hazard summaries where available,
 - warnings,
 - metadata/download information where available.
 
@@ -195,58 +331,64 @@ Current data inputs include:
 - WorldPop-style population raster data,
 - GeoBoundaries/local admin boundaries,
 - Geofabrik/OSM-derived infrastructure assets,
-- Fiji province and tikina boundary files.
+- Fiji province and tikina boundary files,
+- NEX-GDDP-CMIP6 daily tasmax subsets for TX90p processing,
+- EMPIRIC_TC/STORM-style tropical cyclone ASC hazard grid.
+
+Large raw/generated data should normally remain local and out of git:
+
+- raw NetCDF files,
+- WorldPop rasters,
+- large generated manifests,
+- temporary downloaded climate files,
+- experimental CORDEX/ESGF download outputs.
+
+Cloud Storage may be useful later for large static assets, but it is not required for the current local Dockerization workflow.
 
 ---
 
-## Climate-index work started
+## Repository structure
 
-The visualization tool currently keeps the live forecast workflow, but a future precomputed climate-index mode has been started through the climate catalog.
-
-Current approved thresholds:
+Important paths:
 
 ```txt
-Tmax:
-30, 32, 35, 38, 40 °C
+backend/
+  server.js
 
-Wet-bulb temperature:
-24, 26, 28, 30, 32 °C
+frontend/
+  src/api/
+  src/components/map/
 
-Apparent temperature:
-26, 30, 32, 35, 38, 40 °C
+data/
+  catalog/
+  hazards/tropical_cyclone/raw/
+  reference/pict/
+  reference/pict_region_registry.json
+  reference/pict_bootstrap_manifest.json
+  reference/pict_geofabrik_asset_manifest.json
+
+backend/cache/
+  admin_assets/
+  climate_indices/
+  tropical_cyclone/
+
+scripts/
+  build_nex_tx90p_bivariate_fiji.py
+  build_nex_tx90p_time_windows_fiji.py
+  build_tropical_cyclone_hazard_layer.py
+  download_nex_gddp_cmip6_tasmax_fiji.py
+  inspect_climate_netcdf.py
+
+Dockerfile
+.dockerignore
+.gitignore
 ```
 
-Candidate climate metrics:
+---
 
-```txt
-days_above_threshold
-share_days_above_threshold
-ever_reaches_threshold
-years_with_any_exceedance
-max_consecutive_days_above_threshold
-hot_spell_count
-TXx
-TX90p
-WSDI
-```
+## Local setup
 
-Candidate time windows:
-
-```txt
-5-year
-decade
-```
-
-Planned projection source:
-
-```txt
-CORDEX / ESGF daily tasmax NetCDF data
-ClimDEX / ETCCDI-style index definitions
-```
-
-## Data Download / Rebuild Instructions
-
-### 1. Install dependencies
+### 1. Install Node dependencies
 
 From the repository root:
 
@@ -258,37 +400,36 @@ cd ../frontend
 npm install
 ```
 
-Some data-building scripts also require Python geospatial packages:
+### 2. Install Python geospatial dependencies
+
+Some data-building scripts require Python geospatial packages:
 
 ```bash
-python -m pip install geopandas requests pyogrio fiona shapely
+python -m pip install geopandas requests pyogrio fiona shapely numpy rasterio h3
 ```
 
-### 2. Required local folders
+Depending on your environment, some packages may already be installed.
+
+### 3. Required local folders
 
 Create the expected local data/cache folders:
 
 ```bash
 mkdir -p data/reference/pict
 mkdir -p data/osm
-mkdir -p data/climate/raw/cordex
-mkdir -p data/climate/raw/wet_bulb
+mkdir -p data/climate/raw/nex_gddp_cmip6
 mkdir -p data/climate/processed
+mkdir -p data/hazards/tropical_cyclone/raw
 mkdir -p backend/cache/admin_assets
 mkdir -p backend/cache/climate_indices
+mkdir -p backend/cache/tropical_cyclone
 ```
 
-### 3. Fiji reference data
+---
 
-The current Fiji MVP depends on these reference GeoJSON files contained in our shared drive:
+## Data download / rebuild instructions
 
-```txt
-data/reference/fiji_admin_adm1.geojson
-data/reference/fiji_admin_adm2.geojson
-data/reference/fiji_tikina.geojson
-```
-
-### 4. Build / download PICT region boundaries and population files
+### 1. Build / download PICT region boundaries and population inputs
 
 To download the PICT region boundary registry and population inputs, run:
 
@@ -319,7 +460,7 @@ node scripts/bootstrap_pict_region_data.mjs \
   --skip-assets
 ```
 
-### 5. Build cached infrastructure assets
+### 2. Build cached infrastructure assets
 
 The app uses cached OSM/Geofabrik-derived infrastructure assets instead of live Overpass queries during normal use.
 
@@ -353,7 +494,7 @@ backend/cache/admin_assets/
 data/reference/pict_geofabrik_asset_manifest.json
 ```
 
-### 6. Fiji tikina asset cache
+### 3. Fiji tikina asset cache
 
 For Fiji tikina-level asset lookup, build tikina caches from the province-level asset cache:
 
@@ -367,7 +508,89 @@ This writes tikina asset cache files under:
 backend/cache/admin_assets/
 ```
 
-### 7. Run the backend
+### 4. Download NEX-GDDP-CMIP6 tasmax data for Fiji
+
+To download daily tasmax subsets for Fiji:
+
+```bash
+python scripts/download_nex_gddp_cmip6_tasmax_fiji.py \
+  --models ACCESS-CM2 CanESM5 GFDL-ESM4 MPI-ESM1-2-HR NorESM2-MM \
+  --experiments historical ssp585 \
+  --future-start 2015 \
+  --future-end 2100
+```
+
+To also support SSP2-4.5:
+
+```bash
+python scripts/download_nex_gddp_cmip6_tasmax_fiji.py \
+  --models ACCESS-CM2 CanESM5 GFDL-ESM4 MPI-ESM1-2-HR NorESM2-MM \
+  --experiments ssp245 \
+  --future-start 2015 \
+  --future-end 2100
+```
+
+Raw NetCDF outputs should stay out of git.
+
+### 5. Build TX90p yearly climate-index layers
+
+```bash
+python scripts/build_nex_tx90p_bivariate_fiji.py \
+  --models ACCESS-CM2 CanESM5 GFDL-ESM4 MPI-ESM1-2-HR NorESM2-MM \
+  --experiments historical ssp585
+```
+
+If SSP2-4.5 data is downloaded:
+
+```bash
+python scripts/build_nex_tx90p_bivariate_fiji.py \
+  --models ACCESS-CM2 CanESM5 GFDL-ESM4 MPI-ESM1-2-HR NorESM2-MM \
+  --experiments historical ssp245
+```
+
+Expected generated output pattern:
+
+```txt
+backend/cache/climate_indices/tasmax/fji/h3_res6/tx90p/ensemble/yearly/<scenario>_<year>.geojson
+```
+
+### 6. Build 5-year and decade TX90p layers
+
+```bash
+python scripts/build_nex_tx90p_time_windows_fiji.py \
+  --scenarios ssp245 ssp585 \
+  --windows 5_year decade
+```
+
+Expected generated output pattern:
+
+```txt
+backend/cache/climate_indices/tasmax/fji/h3_res6/tx90p/ensemble/5_year/<scenario>_<year>.geojson
+backend/cache/climate_indices/tasmax/fji/h3_res6/tx90p/ensemble/decade/<scenario>_<year>.geojson
+```
+
+### 7. Build tropical cyclone hazard layers
+
+For the current single TC layer:
+
+```bash
+python scripts/build_tropical_cyclone_hazard_layer.py \
+  --input data/hazards/tropical_cyclone/raw/TC_200_year.asc \
+  --country-id all
+```
+
+Expected generated outputs include:
+
+```txt
+backend/cache/tropical_cyclone/pict/tc_hazard.geojson
+backend/cache/tropical_cyclone/fji/tc_hazard.geojson
+```
+
+---
+
+## Running locally without Docker
+
+### 1. Run the backend
 
 From the repository root:
 
@@ -376,27 +599,19 @@ cd backend
 ADMIN_ASSET_WARMUP=false node server.js
 ```
 
-The backend should run on:
+The backend defaults to:
 
 ```txt
 http://localhost:8000
 ```
 
-Useful backend checks:
+To run it on the production-style port:
 
 ```bash
-curl -s http://localhost:8000/api/regions | jq
+PORT=8080 ADMIN_ASSET_WARMUP=false node server.js
 ```
 
-```bash
-curl -s 'http://localhost:8000/api/admin-boundaries?country_id=fji&admin_level=tikina' | jq '.metadata'
-```
-
-```bash
-curl -s http://localhost:8000/api/climate-catalog | jq '{variables,mvp_metrics,time_windows:.time_windows}'
-```
-
-### 10. Run the frontend
+### 2. Run the frontend in development mode
 
 In another terminal:
 
@@ -407,19 +622,246 @@ npm run dev
 
 Then open the local Vite URL shown in the terminal.
 
-### 11. Files intentionally not committed
+### 3. Run production-style locally without Docker
+
+Build the frontend:
+
+```bash
+cd frontend
+npm run build
+```
+
+Then run the backend on port 8080:
+
+```bash
+cd ../backend
+PORT=8080 ADMIN_ASSET_WARMUP=false node server.js
+```
+
+Open:
+
+```txt
+http://localhost:8080
+```
+
+The backend serves `frontend/dist` in production-style mode.
+
+---
+
+## Local Docker run
+
+The project can be run as a single local Docker container. The container builds the React frontend and runs the Express backend, which serves both the frontend and the `/api/...` routes.
+
+### 1. Make sure Docker Desktop is running
+
+On macOS:
+
+```bash
+open -a Docker
+```
+
+Check Docker is available:
+
+```bash
+docker info
+```
+
+### 2. Build the image
+
+From the repository root:
+
+```bash
+docker build -t pict-climate-risk .
+```
+
+### 3. Run the container
+
+```bash
+docker run --rm \
+  -p 8080:8080 \
+  -e PORT=8080 \
+  -e ADMIN_ASSET_WARMUP=false \
+  pict-climate-risk
+```
+
+Open:
+
+```txt
+http://localhost:8080
+```
+
+### 4. Docker API smoke tests
+
+In another terminal:
+
+```bash
+curl -s "http://localhost:8080/api/regions" | jq '.countries | length'
+```
+
+Expected output:
+
+```txt
+21
+```
+
+Check Fiji TX90p:
+
+```bash
+curl -s "http://localhost:8080/api/climate-index?country_id=fji&variable=tasmax&metric=tx90p&scenario=ssp585&time_window=yearly&year=2030&h3_resolution=6" | jq '.features | length'
+```
+
+Expected output:
+
+```txt
+920
+```
+
+Check Fiji TC hazard:
+
+```bash
+curl -s "http://localhost:8080/api/tropical-cyclone-hazard?country_id=fji&layer_id=tc_hazard" | jq '.metadata | {country_id, feature_count}'
+```
+
+Expected output:
+
+```json
+{
+  "country_id": "fji",
+  "feature_count": 56
+}
+```
+
+### 5. Docker image sanity checks
+
+Confirm raw NetCDF files are not inside the image:
+
+```bash
+docker run --rm pict-climate-risk sh -c "find /app -name '*.nc' | head"
+```
+
+Expected output: no files.
+
+Confirm climate cache files are present if you built them locally before the Docker build:
+
+```bash
+docker run --rm pict-climate-risk sh -c "ls -lh /app/backend/cache/climate_indices/tasmax/fji/h3_res6/tx90p/ensemble/yearly | head"
+```
+
+Confirm TC cache files are present:
+
+```bash
+docker run --rm pict-climate-risk sh -c "ls -lh /app/backend/cache/tropical_cyclone/fji"
+```
+
+### 6. Notes on image size
+
+The Docker image may be large during local development if generated GeoJSON caches are copied into the image. This is acceptable for local testing.
+
+For deployment or production, large static/generated datasets should eventually be moved to a Cloud Storage Bucket or another external data store instead of being bundled directly into the image.
+
+---
+
+## Useful backend checks
+
+### Region registry
+
+```bash
+curl -s http://localhost:8000/api/regions | jq '.countries | length'
+```
+
+### Admin boundaries
+
+```bash
+curl -s 'http://localhost:8000/api/admin-boundaries?country_id=fji&admin_level=tikina' | jq '.metadata'
+```
+
+### Climate catalog
+
+```bash
+curl -s http://localhost:8000/api/climate-catalog | jq '{variables,mvp_metrics,time_windows:.time_windows}'
+```
+
+### Climate-index layer
+
+```bash
+curl -s "http://localhost:8000/api/climate-index?country_id=fji&variable=tasmax&metric=tx90p&scenario=ssp585&time_window=yearly&year=2030&h3_resolution=6" | jq '.features | length'
+```
+
+### Tropical cyclone hazard layer
+
+```bash
+curl -s "http://localhost:8000/api/tropical-cyclone-hazard?country_id=fji&layer_id=tc_hazard" | jq '.metadata'
+```
+
+### All-PICT tropical cyclone layer
+
+```bash
+curl -s "http://localhost:8000/api/tropical-cyclone-hazard?country_id=pict&layer_id=tc_hazard" | jq '.metadata'
+```
+
+---
+
+## Files intentionally not committed
 
 The following are generated or large local data files and should normally stay out of git:
 
 ```txt
 backend/cache/
-data/reference/pict/
 data/osm/
 data/climate/raw/
 data/climate/processed/
+data/climate/manifests/
+data/reference/pict/*/worldpop/*.tif
+data/hazards/tropical_cyclone/raw/TC_500_year.asc
 *.nc
 *.tif
 *.tiff
+*.grib
+*.grib2
+*.zarr/
 *.gpkg
 *.gpkg.zip
 ```
+
+Files that may be committed because they are lightweight project inputs/configuration:
+
+```txt
+Dockerfile
+.dockerignore
+.gitignore
+data/reference/pict/**/*.geojson
+data/reference/pict_region_registry.json
+data/reference/pict_bootstrap_manifest.json
+data/reference/pict_geofabrik_asset_manifest.json
+data/hazards/tropical_cyclone/raw/TC_200_year.asc
+scripts/build_nex_tx90p_bivariate_fiji.py
+scripts/build_nex_tx90p_time_windows_fiji.py
+scripts/build_tropical_cyclone_hazard_layer.py
+scripts/download_nex_gddp_cmip6_tasmax_fiji.py
+scripts/inspect_climate_netcdf.py
+```
+
+---
+
+## Current validation status
+
+Latest local validation:
+
+```txt
+/api/regions returned 21 countries
+/api/climate-index for Fiji SSP5-8.5 yearly 2030 returned 920 features
+/api/tropical-cyclone-hazard for Fiji returned 56 features
+Docker image contained no .nc files
+Docker image included generated climate and TC cache files for local testing
+```
+
+---
+
+## Known limitations / next steps
+
+- The currently supplied `TC_500_year.asc` file matched `TC_200_year.asc`, so only one TC hazard layer is currently used.
+- TC data is coarse 0.5° grid data; the UI should not imply finer resolution than that.
+- The current TX90p implementation uses a practical local 90th-percentile baseline approach, not a full ETCCDI calendar-day/bootstrap TX90p implementation.
+- Generated climate cache files can make local Docker images large.
+- Cloud Storage Bucket support may be useful later for large static/generated data, but is not required for current local Docker testing.
+- The chatbot layer has not yet been integrated.
