@@ -196,7 +196,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>Ensemble mean TX90p:</strong> ${formatPercentDays(
             properties.ensemble_mean_tx90p ?? properties.tx90p ?? properties.value
           )}</div>
-          <div><strong>Model spread:</strong> ${formatNumber(
+          <div><strong>Inter-inter-model spread:</strong> ${formatNumber(
             properties.uncertainty_spread
           )} percentage points</div>
           <div><strong>Reliability score:</strong> ${formatNumber(
@@ -207,7 +207,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>Reliability class:</strong> ${cleanLabel(
             properties.reliability_class
           )}</div>
-          <div><strong>Bivariate class:</strong> ${cleanLabel(
+          <div><strong>3×3 class:</strong> ${cleanLabel(
             properties.bivariate_class
           )}</div>
           <div><strong>Models:</strong> ${String(properties.model_count || "N/A")}</div>
@@ -217,7 +217,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           )}</div>
         </div>
         <div class="mt-1 border-t border-neutral-100 pt-1 text-[10px] leading-snug text-neutral-500">
-          Color comes from a bivariate matrix: vertical axis = TX90p risk, horizontal axis = model reliability.
+          Color comes from a 3×3 bivariate matrix: vertical axis = TX90p risk; horizontal axis = model reliability/agreement.
         </div>
       </div>
     `;
@@ -571,37 +571,25 @@ const FeatureHighlighter = ({
         "fill-color": [
           "match",
           ["get", "bivariate_class"],
-          "very_low_risk_low_reliability",
-          "#21164f",
-          "very_low_risk_medium_reliability",
-          "#46328c",
-          "very_low_risk_high_reliability",
-          "#7c6bd6",
           "low_risk_low_reliability",
-          "#302354",
+          "#3b2c66",
           "low_risk_medium_reliability",
-          "#6750a4",
+          "#6d55b3",
           "low_risk_high_reliability",
-          "#a58af0",
+          "#a78bfa",
           "medium_risk_low_reliability",
-          "#553642",
+          "#6b3f35",
           "medium_risk_medium_reliability",
-          "#94705c",
+          "#a66a43",
           "medium_risk_high_reliability",
-          "#ddb579",
+          "#f1b866",
           "high_risk_low_reliability",
-          "#763d1f",
+          "#8a2d13",
           "high_risk_medium_reliability",
-          "#b56825",
-          "high_risk_high_reliability",
-          "#f59e0b",
-          "very_high_risk_low_reliability",
-          "#84280f",
-          "very_high_risk_medium_reliability",
           "#c2410c",
-          "very_high_risk_high_reliability",
-          "#ff6b00",
-          "#6750a4",
+          "high_risk_high_reliability",
+          "#ff7a00",
+          "#a66a43",
         ],
         "fill-opacity": 0.82,
       },

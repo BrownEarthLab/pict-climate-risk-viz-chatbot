@@ -2646,7 +2646,7 @@ const MapCanvas = ({
                     {hasTropicalCycloneHazardLayer
                       ? "Showing precomputed EMPIRIC_TC tropical-cyclone hazard on the native 0.5° grid for the current map scope."
                       : hasClimateIndexLayer
-                        ? "Showing precomputed NEX-GDDP-CMIP6 ensemble TX90p for the current map scope. Colors use a bivariate TX90p risk × model reliability matrix."
+                        ? "Showing precomputed NEX-GDDP-CMIP6 ensemble TX90p for the current map scope. Colors use a 3×3 bivariate TX90p risk × model reliability matrix."
                         : "Heat is the default workflow. Select a country, admin scale, and area, then run heat risk or analyze an infrastructure asset."}
                   </p>
                 </div>
@@ -2916,7 +2916,7 @@ const MapCanvas = ({
 
                             <div className="rounded-md bg-red-50 p-1.5">
                               <div className="text-[9px] font-bold uppercase text-red-400">
-                                Model spread
+                                Inter-inter-model spread
                               </div>
                               <div className="text-sm font-bold text-red-950">
                                 {formatClimatePercent(
@@ -2973,7 +2973,7 @@ const MapCanvas = ({
                           </div>
 
                           <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-md border border-white/80">
-                            {["#84280f", "#c2410c", "#ff6b00", "#763d1f", "#b56825", "#f59e0b", "#553642", "#94705c", "#ddb579", "#302354", "#6750a4", "#a58af0", "#21164f", "#46328c", "#7c6bd6"].map(
+                            {["#8a2d13", "#c2410c", "#ff7a00", "#6b3f35", "#a66a43", "#f1b866", "#3b2c66", "#6d55b3", "#a78bfa"].map(
                               (color) => (
                                 <div
                                   key={color}
@@ -2992,9 +2992,16 @@ const MapCanvas = ({
                         </div>
 
                         <p className="mt-2 text-[10px] leading-snug text-red-700">
-                          Each cell color combines TX90p risk class with reliability.
-                          Higher/rightward reliability means lower model spread.
+                          3×3 legend: color combines ensemble-mean TX90p risk
+                          with model reliability. Reliability is the inverse of
+                          normalized inter-inter-model spread.
                         </p>
+
+                        <div className="mt-2 rounded-md bg-red-50 p-2 text-[9px] leading-snug text-red-800">
+                          <div><strong>Risk:</strong> ensemble mean TX90p.</div>
+                          <div><strong>Inter-inter-model spread:</strong> max model TX90p − min model TX90p.</div>
+                          <div><strong>Reliability:</strong> 1 − min(1, spread / global spread p95).</div>
+                        </div>
                       </div>
                     </div>
 
