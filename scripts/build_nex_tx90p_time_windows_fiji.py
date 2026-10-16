@@ -38,10 +38,17 @@ DEFAULT_YEARLY_DIR = Path("backend/cache/climate_indices/tasmax/fji/h3_res6/tx90
 DEFAULT_OUT_ROOT = Path("backend/cache/climate_indices/tasmax/fji/h3_res6/tx90p/ensemble")
 DEFAULT_CATALOG_PATH = Path("backend/cache/climate_indices/tasmax/fji/tx90p_nex_time_windows_catalog.json")
 
+# Value-by-alpha palette: hue shows risk/value, opacity shows reliability.
 BIVARIATE_COLOR_MATRIX_3X3: dict[str, dict[str, str]] = {
-    "low": {"low": "#3b2c66", "medium": "#6d55b3", "high": "#a78bfa"},
-    "medium": {"low": "#6b3f35", "medium": "#a66a43", "high": "#f1b866"},
-    "high": {"low": "#8a2d13", "medium": "#c2410c", "high": "#ff7a00"},
+    "low": {"low": "#2c7bb6", "medium": "#2c7bb6", "high": "#2c7bb6"},
+    "medium": {"low": "#b7a891", "medium": "#b7a891", "high": "#b7a891"},
+    "high": {"low": "#f28e2b", "medium": "#f28e2b", "high": "#f28e2b"},
+}
+
+RELIABILITY_ALPHA = {
+    "low": 0.38,
+    "medium": 0.64,
+    "high": 0.90,
 }
 
 RISK_CLASS_BINS = {
@@ -244,6 +251,8 @@ def apply_bivariate_properties(*, features: list[dict[str, Any]], spread_p95: fl
                 "bivariate_class": f"{risk_class}_risk_{reliability_class}_reliability",
                 "bivariate_color": color,
                 "bivariate_matrix_size": "3x3",
+                "alpha": RELIABILITY_ALPHA[reliability_class],
+                "alpha_method": "reliability_class_value_by_alpha_3x3",
                 "risk_class_bins": RISK_CLASS_BINS,
                 "reliability_class_bins": RELIABILITY_CLASS_BINS,
                 "normalization_reference": "global_window_spread_p95 across generated time-window layers",
@@ -315,6 +324,12 @@ def main() -> None:
                     "reliability_class_bins": RELIABILITY_CLASS_BINS,
                     "bivariate_matrix_size": "3x3",
                     "bivariate_color_matrix": BIVARIATE_COLOR_MATRIX_3X3,
+                    "reliability_alpha": RELIABILITY_ALPHA,
+                    "value_by_alpha": {
+                        "value": "ensemble_mean_tx90p",
+                        "hue": "risk_class (blue -> neutral -> orange)",
+                        "alpha": "reliability_class derived from inverse normalized inter-model spread",
+                    },
                 }
                 all_window_payloads.append((out_path, metadata, features, spreads))
 
@@ -333,8 +348,11 @@ def main() -> None:
                 "reliability_property": "reliability_score",
                 "reliability_class_property": "reliability_class",
                 "color_property": "bivariate_color",
-                "color_meaning": "3x3 bivariate TX90p risk x model reliability",
+                "alpha_property": "alpha",
+                "color_meaning": "ensemble mean TX90p risk: blue low, neutral medium, orange high",
+                "alpha_meaning": "model reliability from inter-model spread: lower opacity = lower agreement/reliability",
                 "bivariate_color_matrix": BIVARIATE_COLOR_MATRIX_3X3,
+                "reliability_alpha": RELIABILITY_ALPHA,
                 "legend_axes": {
                     "x_axis": "Model reliability / agreement, low to high",
                     "y_axis": "TX90p heat risk, low to high",
@@ -375,6 +393,12 @@ def main() -> None:
         "reliability_class_bins": RELIABILITY_CLASS_BINS,
         "bivariate_matrix_size": "3x3",
         "bivariate_color_matrix": BIVARIATE_COLOR_MATRIX_3X3,
+        "reliability_alpha": RELIABILITY_ALPHA,
+        "value_by_alpha": {
+            "value": "ensemble_mean_tx90p",
+            "hue": "risk_class (blue -> neutral -> orange)",
+            "alpha": "reliability_class derived from inverse normalized inter-model spread",
+        },
         "outputs": catalog_outputs,
     }
     args.catalog.parent.mkdir(parents=True, exist_ok=True)

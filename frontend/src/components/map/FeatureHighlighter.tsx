@@ -196,7 +196,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>Ensemble mean TX90p:</strong> ${formatPercentDays(
             properties.ensemble_mean_tx90p ?? properties.tx90p ?? properties.value
           )}</div>
-          <div><strong>Inter-inter-model spread:</strong> ${formatNumber(
+          <div><strong>Inter-inter-inter-inter-model spread:</strong> ${formatNumber(
             properties.uncertainty_spread
           )} percentage points</div>
           <div><strong>Reliability score:</strong> ${formatNumber(
@@ -217,7 +217,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           )}</div>
         </div>
         <div class="mt-1 border-t border-neutral-100 pt-1 text-[10px] leading-snug text-neutral-500">
-          Color comes from a 3×3 bivariate matrix: vertical axis = TX90p risk; horizontal axis = model reliability/agreement.
+          3×3 value-by-alpha: blue→orange = TX90p risk; opacity = model reliability/agreement.
         </div>
       </div>
     `;
@@ -513,17 +513,27 @@ const FeatureHighlighter = ({
       ],
       paint: {
         "fill-color": [
-          "interpolate",
-          ["linear"],
-          ["get", "temp_c"],
-          20,
-          "#3b82f6",
-          25,
-          "#eab308",
-          30,
-          "#ef4444",
+          "match",
+          ["get", "risk_class"],
+          "low",
+          "#2c7bb6",
+          "medium",
+          "#b7a891",
+          "high",
+          "#f28e2b",
+          "#b7a891",
         ],
-        "fill-opacity": 0.5,
+        "fill-opacity": [
+          "match",
+          ["get", "reliability_class"],
+          "low",
+          0.38,
+          "medium",
+          0.64,
+          "high",
+          0.9,
+          0.64,
+        ],
       },
     });
 

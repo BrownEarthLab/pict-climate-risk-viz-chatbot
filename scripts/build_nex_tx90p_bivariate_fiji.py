@@ -52,10 +52,19 @@ FIJI_GEOMETRY_CANDIDATES = [
 ]
 
 # 3x3 only. Rows = risk low->high. Columns = reliability low->high.
+# Value-by-alpha palette: risk/value is encoded by hue (blue -> neutral -> orange),
+# reliability is encoded by opacity. Keeping the hue constant across each row makes
+# the visual semantics explicit instead of using nine unrelated colors.
 BIVARIATE_COLOR_MATRIX_3X3: dict[str, dict[str, str]] = {
-    "low": {"low": "#3b2c66", "medium": "#6d55b3", "high": "#a78bfa"},
-    "medium": {"low": "#6b3f35", "medium": "#a66a43", "high": "#f1b866"},
-    "high": {"low": "#8a2d13", "medium": "#c2410c", "high": "#ff7a00"},
+    "low": {"low": "#2c7bb6", "medium": "#2c7bb6", "high": "#2c7bb6"},
+    "medium": {"low": "#b7a891", "medium": "#b7a891", "high": "#b7a891"},
+    "high": {"low": "#f28e2b", "medium": "#f28e2b", "high": "#f28e2b"},
+}
+
+RELIABILITY_ALPHA = {
+    "low": 0.38,
+    "medium": 0.64,
+    "high": 0.90,
 }
 
 RISK_CLASS_BINS = {
@@ -485,8 +494,8 @@ def make_model_feature(*, h3_id: str, value: float, model: str, experiment: str,
             "reliability_class": reliability_class,
             "bivariate_class": f"{risk_class}_risk_{reliability_class}_reliability",
             "bivariate_color": color,
-            "alpha": 0.86,
-            "alpha_method": "fixed_for_3x3_bivariate_layer",
+            "alpha": RELIABILITY_ALPHA[reliability_class],
+            "alpha_method": "reliability_class_value_by_alpha_3x3",
         },
     }
 
@@ -554,10 +563,10 @@ def make_ensemble_feature(*, h3_id: str, model_values: dict[str, float], source_
             "bivariate_matrix_size": "3x3",
             "risk_class_bins": RISK_CLASS_BINS,
             "reliability_class_bins": RELIABILITY_CLASS_BINS,
-            "alpha": 0.86,
-            "alpha_method": "fixed_for_3x3_bivariate_layer",
+            "alpha": RELIABILITY_ALPHA[reliability_class],
+            "alpha_method": "reliability_class_value_by_alpha_3x3",
             "baseline_period": baseline_period,
-            "description": "3x3 bivariate TX90p risk x model reliability layer. Risk is ensemble mean TX90p; reliability is inverse normalized inter-model spread.",
+            "description": "3x3 value-by-alpha TX90p layer. Blue-to-orange hue encodes ensemble mean TX90p risk; opacity encodes reliability from inverse normalized inter-model spread.",
         },
     }
 
@@ -590,6 +599,12 @@ def base_metadata(args: argparse.Namespace, *, baseline_period: str, spread_p95:
         "reliability_class_bins": RELIABILITY_CLASS_BINS,
         "bivariate_matrix_size": "3x3",
         "bivariate_color_matrix": BIVARIATE_COLOR_MATRIX_3X3,
+        "reliability_alpha": RELIABILITY_ALPHA,
+        "value_by_alpha": {
+            "value": "ensemble_mean_tx90p",
+            "hue": "risk_class (blue -> neutral -> orange)",
+            "alpha": "reliability_class derived from inverse normalized inter-model spread",
+        },
     }
     if spread_p95 is not None:
         metadata["spread_p95"] = spread_p95
@@ -772,8 +787,11 @@ def main() -> None:
                 "reliability_property": "reliability_score",
                 "reliability_class_property": "reliability_class",
                 "color_property": "bivariate_color",
-                "color_meaning": "3x3 bivariate TX90p risk x model reliability",
+                "alpha_property": "alpha",
+                "color_meaning": "ensemble mean TX90p risk: blue low, neutral medium, orange high",
+                "alpha_meaning": "model reliability from inter-model spread: lower opacity = lower agreement/reliability",
                 "bivariate_color_matrix": BIVARIATE_COLOR_MATRIX_3X3,
+                "reliability_alpha": RELIABILITY_ALPHA,
                 "legend_axes": {
                     "x_axis": "Model reliability / agreement, low to high",
                     "y_axis": "TX90p heat risk, low to high",

@@ -1159,6 +1159,43 @@ const MapCanvas = ({
   const initialAnalysisSettings = useMemo(loadAnalysisSettings, []);
 
   const [isLegendExpanded, setIsLegendExpanded] = useState(true);
+
+  // Presentation palette: neutral basemap so analytical blue/orange layers carry the emphasis.
+  useEffect(() => {
+    if (!mapboxMap) return;
+
+    const applyNeutralBasemap = () => {
+      try {
+        const style = mapboxMap.getStyle();
+
+        style.layers?.forEach((layer) => {
+          if (layer.type === "background") {
+            const current = mapboxMap.getPaintProperty(layer.id, "background-color");
+            if (current !== "#e5e7eb") {
+              mapboxMap.setPaintProperty(layer.id, "background-color", "#e5e7eb");
+            }
+          }
+
+          if (layer.type === "fill" && /water|ocean/i.test(layer.id)) {
+            const current = mapboxMap.getPaintProperty(layer.id, "fill-color");
+            if (current !== "#d5d9dd") {
+              mapboxMap.setPaintProperty(layer.id, "fill-color", "#d5d9dd");
+            }
+          }
+        });
+      } catch (error) {
+        console.warn("Could not apply neutral basemap palette:", error);
+      }
+    };
+
+    if (mapboxMap.isStyleLoaded()) {
+      applyNeutralBasemap();
+    }
+
+    mapboxMap.on("styledata", applyNeutralBasemap);
+    return () => mapboxMap.off("styledata", applyNeutralBasemap);
+  }, [mapboxMap]);
+
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const [isLoadingRegions, setIsLoadingRegions] = useState(false);
   const [regionsError, setRegionsError] = useState<string | null>(null);
@@ -2392,7 +2429,7 @@ const MapCanvas = ({
   };
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 font-sans">
       <div ref={mapContainerRef} className="h-full w-full" />
 
       {!mapboxMap && (
@@ -2453,8 +2490,16 @@ const MapCanvas = ({
             </button>
           )}
 
-          <div className="absolute bottom-16 left-4 top-6 z-20 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur-md">
-            <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+          <div className={`absolute left-4 top-6 z-20 flex flex-col transition-all duration-300 ${
+              isLegendExpanded
+                ? "bottom-16 w-[300px] overflow-hidden rounded-2xl border border-black/5 bg-white/90 shadow-lg backdrop-blur-md"
+                : "w-[190px] overflow-visible bg-transparent shadow-none"
+            }`}>
+            <div className={`flex items-center justify-between ${
+                isLegendExpanded
+                  ? "border-b border-neutral-100 px-4 py-3"
+                  : "rounded-xl border border-black/5 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-md"
+              }`}>
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                 Analysis controls
               </span>
@@ -2820,13 +2865,13 @@ const MapCanvas = ({
                       </button>
 
                       {selectedCountryId !== "fji" && (
-                        <p className="mt-2 text-[10px] leading-snug text-red-700">
+                        <p className="mt-2 text-[10px] leading-snug text-slate-600">
                           The climate-index cache is currently built for Fiji only.
                         </p>
                       )}
 
                       {selectedCountryId === "fji" && !selectedArea && (
-                        <p className="mt-2 text-[10px] leading-snug text-red-700">
+                        <p className="mt-2 text-[10px] leading-snug text-slate-600">
                           No province/tikina selected: this will show the full Fiji climate layer.
                         </p>
                       )}
@@ -2973,7 +3018,7 @@ const MapCanvas = ({
                           </div>
 
                           <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-md border border-white/80">
-                            {["#8a2d13", "#c2410c", "#ff7a00", "#6b3f35", "#a66a43", "#f1b866", "#3b2c66", "#6d55b3", "#a78bfa"].map(
+                            {["rgba(242,142,43,0.38)", "rgba(242,142,43,0.64)", "rgba(242,142,43,0.90)", "rgba(183,168,145,0.38)", "rgba(183,168,145,0.64)", "rgba(183,168,145,0.90)", "rgba(44,123,182,0.38)", "rgba(44,123,182,0.64)", "rgba(44,123,182,0.90)"].map(
                               (color) => (
                                 <div
                                   key={color}
@@ -2991,13 +3036,13 @@ const MapCanvas = ({
                           <span>high</span>
                         </div>
 
-                        <p className="mt-2 text-[10px] leading-snug text-red-700">
+                        <p className="mt-2 text-[10px] leading-snug text-slate-600">
                           3×3 legend: color combines ensemble-mean TX90p risk
                           with model reliability. Reliability is the inverse of
                           normalized inter-inter-model spread.
                         </p>
 
-                        <div className="mt-2 rounded-md bg-red-50 p-2 text-[9px] leading-snug text-red-800">
+                        <div className="mt-2 rounded-md bg-slate-50 p-2 text-[9px] leading-snug text-slate-700">
                           <div><strong>Risk:</strong> ensemble mean TX90p.</div>
                           <div><strong>Inter-inter-model spread:</strong> max model TX90p − min model TX90p.</div>
                           <div><strong>Reliability:</strong> 1 − min(1, spread / global spread p95).</div>

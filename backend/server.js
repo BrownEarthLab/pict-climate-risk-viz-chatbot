@@ -4794,7 +4794,6 @@ app.post("/api/spatial-query", async (req, res) => {
   });
 });
 
-<<<<<<< HEAD
 
 function filterClimateGeoJsonToAdminBoundary(geojson, adminLevel, adminId, countryId) {
   const resolvedAdmin = resolveAdminBoundary(adminLevel, adminId, countryId);
@@ -5106,10 +5105,13 @@ app.get("/api/tropical-cyclone-hazard", async (req, res) => {
   } catch (error) {
     console.error("Tropical cyclone hazard endpoint failed:", error);
 
-    return res.status(500).json({
-      error: "Tropical cyclone hazard endpoint failed.",
-      message: error instanceof Error ? error.message : String(error),
-=======
+return res.status(500).json({
+  error: "Tropical cyclone hazard endpoint failed.",
+  message: error instanceof Error ? error.message : String(error),
+});
+  }
+});
+
 // ---------------------------------------------------------------------------
 // SDMX dynamic layer route handlers (temporary home — gh issue #2 will extract)
 // ---------------------------------------------------------------------------
@@ -5157,12 +5159,10 @@ app.post("/api/refresh", async (req, res) => {
       layer,
       status: "refresh_failed",
       error: `Failed to refresh cache: ${err.message}`,
->>>>>>> 08473d9606b4f6cdbe247874f9413dd2d7dc0926
     });
   }
 });
 
-<<<<<<< HEAD
 const frontendDistPath = path.resolve(__dirname, "../frontend/dist");
 
 if (fs.existsSync(frontendDistPath)) {
@@ -5181,11 +5181,6 @@ if (fs.existsSync(frontendDistPath)) {
   console.warn(`Frontend dist not found at ${frontendDistPath}`);
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Spatial API server running at http://localhost:${PORT}`);
-  void warmAdminAssetCacheOnStartup();
-});
-=======
 // GET /api/layers — list available dynamic layers from registry
 app.get("/api/layers", (req, res) => {
   const registryPath = path.resolve(
@@ -5232,4 +5227,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 // Export parseSdmxObservations for testing
 export { parseSdmxObservations };
->>>>>>> 08473d9606b4f6cdbe247874f9413dd2d7dc0926

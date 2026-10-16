@@ -3,6 +3,9 @@ import Sidebar from "../Sidebar";
 import ConversationView from "../chat/ConversationView";
 import { useSpatialQuery } from "../../hooks/useSpatialQuery";
 
+// Chatbot UI is intentionally hidden for the current map-only prototype.
+const CHATBOT_ENABLED = false;
+
 interface Conversation {
   id: string;
   title: string;
@@ -55,15 +58,22 @@ const AppLayout = ({
   } = useSpatialQuery();
 
   const isDrawMode = drawnGeometry !== null;
-  const hasActiveChat =
-    activeConversation !== null && activeConversation.messages.length > 0;
+  const chatbotUiEnabled = CHATBOT_ENABLED;
 
-  const sidebarMode: "active-chat" | "history" | "hidden" = hasActiveChat
-    ? "active-chat"
-    : "history";
+  const hasActiveChat =
+    chatbotUiEnabled &&
+    activeConversation !== null &&
+    activeConversation.messages.length > 0;
+
+  const sidebarMode: "active-chat" | "history" | "hidden" =
+    chatbotUiEnabled
+      ? hasActiveChat
+        ? "active-chat"
+        : "history"
+      : "hidden";
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] gap-4">
+    <div className="flex h-[calc(100vh-2rem)] gap-4 font-sans">
       <main className="relative flex-1 overflow-hidden rounded-[28px] border border-black/5 bg-[#f8f6f1] shadow-sm">
         <MapCanvas
           onDrawGeometry={setDrawnGeometry}
@@ -81,6 +91,7 @@ const AppLayout = ({
       </main>
 
       <aside
+        style={{ display: CHATBOT_ENABLED ? undefined : "none" }}
         className={`h-full min-h-0 shrink-0 transition-all duration-300 ${
           sidebarMode === "hidden"
             ? "w-0 overflow-hidden opacity-0"
