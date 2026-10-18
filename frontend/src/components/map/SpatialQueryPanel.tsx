@@ -343,10 +343,10 @@ const SpatialQueryPanel = ({
   };
 
   return (
-    <div className="absolute bottom-14 right-3 z-[1000] max-h-[500px] w-[340px] overflow-y-auto rounded-2xl border border-black/5 bg-white/92 p-4 shadow-lg backdrop-blur-md">
+    <div className="absolute bottom-14 right-3 z-[1000] max-h-[500px] w-[340px] overflow-y-auto rounded-2xl border border-[#BFD7ED] bg-white/94 p-4 shadow-lg backdrop-blur-md">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-[#174A73]">
             {isAssetAnalysis ? "Asset heat risk" : "Analysis results"}
           </p>
           <h3 className="mt-1 text-sm font-black leading-tight text-neutral-950">
@@ -501,11 +501,11 @@ const SpatialQueryPanel = ({
             {showDetails && (
               <div className="mt-3 space-y-3">
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg bg-red-50 p-2">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-red-500">
+                  <div className="rounded-lg bg-[#E8F1F9] p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#174A73]">
                       Max risk
                     </p>
-                    <p className="text-sm font-black text-red-700">
+                    <p className="text-sm font-black text-[#174A73]">
                       {formatPercent(summary.maxExposure)}
                     </p>
                   </div>

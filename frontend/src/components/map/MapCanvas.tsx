@@ -7,6 +7,9 @@ import { useMapbox } from "../../hooks/useMapbox";
 import FeatureHighlighter from "./FeatureHighlighter";
 import SpatialQueryPanel from "./SpatialQueryPanel";
 import MapControls from "./MapControls";
+import { loadClimateCutoffs, reclassifyClimateFeatures, saveClimateCutoffs, type ClimateCutoffs } from "./climateValueByAlpha";
+import { ASSET_LEGEND_ITEMS } from "./assetPalette";
+import ClimateValueByAlphaControls from "./ClimateValueByAlphaControls";
 import type {
   AdminAssetLookupRequestOptions,
   AssetHeatRiskRequestOptions,
@@ -1245,6 +1248,21 @@ const MapCanvas = ({
   const [climateIndexFeatures, setClimateIndexFeatures] = useState<
     GeoJSON.Feature[]
   >([]);
+
+  const [climateCutoffs, setClimateCutoffs] = useState<ClimateCutoffs>(
+    loadClimateCutoffs,
+  );
+
+  const handleClimateCutoffsChange = useCallback(
+    (next: ClimateCutoffs) => {
+      saveClimateCutoffs(next);
+      setClimateCutoffs(next);
+      setClimateIndexFeatures((current) =>
+        reclassifyClimateFeatures(current, next),
+      );
+    },
+    [],
+  );
   const [climateLayerMetadata, setClimateLayerMetadata] = useState<
     Record<string, unknown> | null
   >(null);
@@ -1779,7 +1797,7 @@ const MapCanvas = ({
         },
       }));
 
-      setClimateIndexFeatures(features);
+      setClimateIndexFeatures(reclassifyClimateFeatures(features, climateCutoffs));
       setClimateLayerMetadata({
         ...(layer.metadata || {}),
         ...(layer.api_metadata || {}),
@@ -2622,22 +2640,22 @@ const MapCanvas = ({
                     </div>
                   ) : regionsError ? (
                     <div className="mt-2">
-                      <div className="text-[10px] leading-snug text-red-700">
+                      <div className="text-[10px] leading-snug text-[#174A73]">
                         Region registry could not be loaded.
                       </div>
 
-                      <div className="mt-1 rounded-lg bg-white/70 p-2 text-[9px] leading-snug text-red-600">
+                      <div className="mt-1 rounded-lg bg-white/70 p-2 text-[9px] leading-snug text-[#174A73]">
                         {regionsError}
                       </div>
                     </div>
                   ) : boundaryLoad.status === "error" ? (
                     <div className="mt-2">
-                      <div className="text-[10px] leading-snug text-red-700">
+                      <div className="text-[10px] leading-snug text-[#174A73]">
                         {boundaryLoad.message}
                       </div>
 
                       {boundaryLoad.error && (
-                        <div className="mt-1 rounded-lg bg-white/70 p-2 text-[9px] leading-snug text-red-600">
+                        <div className="mt-1 rounded-lg bg-white/70 p-2 text-[9px] leading-snug text-[#174A73]">
                           {boundaryLoad.error}
                         </div>
                       )}
@@ -2646,7 +2664,7 @@ const MapCanvas = ({
                         onClick={() =>
                           setBoundaryLoadAttempt((attempt) => attempt + 1)
                         }
-                        className="mt-2 rounded-lg bg-red-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-red-700"
+                        className="mt-2 rounded-lg bg-[#174A73] px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-[#003F7B]"
                       >
                         Retry
                       </button>
@@ -2676,8 +2694,8 @@ const MapCanvas = ({
                   )}
                 </div>
 
-                <div className="mt-3 rounded-xl border border-orange-100 bg-white p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-orange-500">
+                <div className="mt-3 rounded-xl border border-[#BFD7ED] bg-[#F3F7FA] p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#174A73]">
                     Active analysis
                   </div>
                   <div className="mt-1 text-sm font-bold text-neutral-950">
@@ -2771,22 +2789,27 @@ const MapCanvas = ({
                     </div>
                     )}
 
-                    <div className="rounded-xl border border-red-100 bg-red-50 p-3">
+                    <div className="rounded-xl border border-[#BFD7ED] bg-[#E8F1F9] p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wide text-red-500">
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-[#174A73]">
                             Climate indices
                           </div>
-                          <div className="mt-1 text-sm font-bold text-red-950">
+                          <div className="mt-1 text-sm font-bold text-[#003F7B]">
                             TX90p · {getClimateScenarioLabel(climateScenario)}
                           </div>
-                          <div className="mt-1 text-[10px] font-medium text-red-700">
+                          <div className="mt-1 text-[10px] font-medium text-[#174A73]">
                             Scope: {climateLayerScopeLabel}
                           </div>
+
+                          <ClimateValueByAlphaControls
+                            value={climateCutoffs}
+                            onChange={handleClimateCutoffsChange}
+                          />
                         </div>
 
                         {hasClimateIndexLayer && (
-                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-red-700">
+                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-[#174A73]">
                             loaded
                           </div>
                         )}
@@ -2800,8 +2823,8 @@ const MapCanvas = ({
                             onClick={() => setClimateScenario(option)}
                             className={`rounded-md px-1.5 py-1 text-[9px] font-bold transition ${
                               climateScenario === option
-                                ? "bg-red-700 text-white shadow-sm"
-                                : "text-red-700 hover:bg-red-50"
+                                ? "bg-[#003F7B] text-white shadow-sm"
+                                : "text-[#174A73] hover:bg-[#E8F1F9]"
                             }`}
                             title={getClimateScenarioShortLabel(option)}
                           >
@@ -2819,8 +2842,8 @@ const MapCanvas = ({
                               onClick={() => setClimateTimeWindow(option)}
                               className={`rounded-md px-1.5 py-1 text-[9px] font-bold transition ${
                                 climateTimeWindow === option
-                                  ? "bg-red-700 text-white shadow-sm"
-                                  : "text-red-700 hover:bg-red-50"
+                                  ? "bg-[#003F7B] text-white shadow-sm"
+                                  : "text-[#174A73] hover:bg-[#E8F1F9]"
                               }`}
                             >
                               {getClimateTimeWindowLabel(option)}
@@ -2830,7 +2853,7 @@ const MapCanvas = ({
                       </div>
 
                       <label className="mt-3 block">
-                        <div className="flex items-center justify-between text-[10px] font-bold text-red-700">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-[#174A73]">
                           <span>{getClimateTimeWindowLabel(climateTimeWindow)} period</span>
                           <span>{climateWindowLabel}</span>
                         </div>
@@ -2848,14 +2871,14 @@ const MapCanvas = ({
                               ),
                             )
                           }
-                          className="mt-2 w-full cursor-pointer accent-red-700"
+                          className="mt-2 w-full cursor-pointer accent-blue-700"
                         />
                       </label>
 
                       <button
                         onClick={handleRunClimateIndexLayer}
                         disabled={isClimateLayerLoading || selectedCountryId !== "fji"}
-                        className="mt-3 w-full rounded-lg bg-red-700 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-200"
+                        className="mt-3 w-full rounded-lg bg-[#003F7B] px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-[#173F5F] disabled:cursor-not-allowed disabled:bg-[#BFD7ED]"
                       >
                         {isClimateLayerLoading
                           ? "Loading TX90p..."
@@ -2877,13 +2900,13 @@ const MapCanvas = ({
                       )}
 
                       {climateLayerError && (
-                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-red-700">
+                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-[#174A73]">
                           {climateLayerError}
                         </p>
                       )}
 
                       {climateLayerMetadata && (
-                        <div className="mt-2 rounded-lg bg-white/85 p-2 text-[10px] leading-snug text-red-800">
+                        <div className="mt-2 rounded-lg bg-white/85 p-2 text-[10px] leading-snug text-[#174A73]">
                           <span className="font-bold">Current:</span>{" "}
                           {formatMetadataValue(
                             climateLayerMetadata.admin_name,
@@ -2924,46 +2947,46 @@ const MapCanvas = ({
                       )}
 
                       {climateLayerSummary && (
-                        <div className="mt-2 rounded-lg bg-white/90 p-2 text-[10px] leading-snug text-red-900">
-                          <div className="font-bold uppercase tracking-wide text-red-600">
+                        <div className="mt-2 rounded-lg bg-white/90 p-2 text-[10px] leading-snug text-[#003F7B]">
+                          <div className="font-bold uppercase tracking-wide text-[#174A73]">
                             Climate summary
                           </div>
 
                           <div className="mt-2 grid grid-cols-2 gap-1">
-                            <div className="rounded-md bg-red-50 p-1.5">
-                              <div className="text-[9px] font-bold uppercase text-red-400">
+                            <div className="rounded-md bg-[#E8F1F9] p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-[#5E7F9A]">
                                 Mean TX90p
                               </div>
-                              <div className="text-sm font-bold text-red-950">
+                              <div className="text-sm font-bold text-[#003F7B]">
                                 {formatClimatePercent(climateLayerSummary.meanTx90p)}
                               </div>
                             </div>
 
-                            <div className="rounded-md bg-red-50 p-1.5">
-                              <div className="text-[9px] font-bold uppercase text-red-400">
+                            <div className="rounded-md bg-[#E8F1F9] p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-[#5E7F9A]">
                                 Max TX90p
                               </div>
-                              <div className="text-sm font-bold text-red-950">
+                              <div className="text-sm font-bold text-[#003F7B]">
                                 {formatClimatePercent(climateLayerSummary.maxTx90p)}
                               </div>
                             </div>
 
-                            <div className="rounded-md bg-red-50 p-1.5">
-                              <div className="text-[9px] font-bold uppercase text-red-400">
+                            <div className="rounded-md bg-[#E8F1F9] p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-[#5E7F9A]">
                                 Reliability
                               </div>
-                              <div className="text-sm font-bold text-red-950">
+                              <div className="text-sm font-bold text-[#003F7B]">
                                 {formatReliabilityValue(
                                   climateLayerSummary.meanReliability,
                                 )}
                               </div>
                             </div>
 
-                            <div className="rounded-md bg-red-50 p-1.5">
-                              <div className="text-[9px] font-bold uppercase text-red-400">
-                                Inter-inter-model spread
+                            <div className="rounded-md bg-[#E8F1F9] p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-[#5E7F9A]">
+                                Inter-model spread
                               </div>
-                              <div className="text-sm font-bold text-red-950">
+                              <div className="text-sm font-bold text-[#003F7B]">
                                 {formatClimatePercent(
                                   climateLayerSummary.meanUncertaintySpread,
                                 )}
@@ -2971,7 +2994,7 @@ const MapCanvas = ({
                             </div>
                           </div>
 
-                          <div className="mt-2 space-y-1 rounded-md bg-red-50 p-1.5 text-[9px] font-semibold text-red-800">
+                          <div className="mt-2 space-y-1 rounded-md bg-[#E8F1F9] p-1.5 text-[9px] font-semibold text-[#174A73]">
                             <div className="flex justify-between gap-2">
                               <span>High-risk cells</span>
                               <span>{formatCompactNumber(climateLayerSummary.highRiskCellCount)}</span>
@@ -3005,20 +3028,20 @@ const MapCanvas = ({
                       )}
 
                       <div className="mt-3 rounded-lg bg-white/85 p-2">
-                        <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-wide text-red-700">
+                        <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-wide text-[#174A73]">
                           <span>Unreliable</span>
                           <span>Reliable</span>
                         </div>
 
                         <div className="grid grid-cols-[auto_1fr] gap-2">
                           <div className="flex items-center">
-                            <div className="-rotate-90 whitespace-nowrap text-[9px] font-bold uppercase tracking-wide text-red-700">
+                            <div className="-rotate-90 whitespace-nowrap text-[9px] font-bold uppercase tracking-wide text-[#174A73]">
                               TX90p risk
                             </div>
                           </div>
 
                           <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-md border border-white/80">
-                            {["rgba(242,142,43,0.38)", "rgba(242,142,43,0.64)", "rgba(242,142,43,0.90)", "rgba(183,168,145,0.38)", "rgba(183,168,145,0.64)", "rgba(183,168,145,0.90)", "rgba(44,123,182,0.38)", "rgba(44,123,182,0.64)", "rgba(44,123,182,0.90)"].map(
+                            {["rgba(244,122,0,0.55)", "rgba(244,122,0,0.75)", "rgba(244,122,0,0.95)", "rgba(184,154,117,0.55)", "rgba(184,154,117,0.75)", "rgba(184,154,117,0.95)", "rgba(0,103,177,0.55)", "rgba(0,103,177,0.75)", "rgba(0,103,177,0.95)"].map(
                               (color) => (
                                 <div
                                   key={color}
@@ -3030,42 +3053,57 @@ const MapCanvas = ({
                           </div>
                         </div>
 
-                        <div className="mt-1 flex justify-between text-[9px] font-semibold text-red-700">
+                        <div className="mt-1 flex justify-between text-[9px] font-semibold text-[#174A73]">
                           <span>low</span>
                           <span>Reliability score</span>
                           <span>high</span>
                         </div>
 
+                        <div className="mt-2 rounded-md border border-[#BFD7ED] bg-white/80 p-2 text-[9px] leading-snug text-[#263746]">
+                          <div className="font-bold text-[#174A73]">Current class boundaries</div>
+                          <div>
+                            Blue &lt; {climateCutoffs.riskLowMax}% · tan{" "}
+                            {climateCutoffs.riskLowMax}–&lt;{climateCutoffs.riskHighMin}% ·
+                            orange ≥ {climateCutoffs.riskHighMin}%
+                          </div>
+                          <div>
+                            Reliability: low &lt; {climateCutoffs.reliabilityLowMax.toFixed(2)} ·
+                            medium {climateCutoffs.reliabilityLowMax.toFixed(2)}–&lt;
+                            {climateCutoffs.reliabilityHighMin.toFixed(2)} · high ≥{" "}
+                            {climateCutoffs.reliabilityHighMin.toFixed(2)}
+                          </div>
+                        </div>
+
                         <p className="mt-2 text-[10px] leading-snug text-slate-600">
                           3×3 legend: color combines ensemble-mean TX90p risk
                           with model reliability. Reliability is the inverse of
-                          normalized inter-inter-model spread.
+                          normalized inter-model spread.
                         </p>
 
                         <div className="mt-2 rounded-md bg-slate-50 p-2 text-[9px] leading-snug text-slate-700">
                           <div><strong>Risk:</strong> ensemble mean TX90p.</div>
-                          <div><strong>Inter-inter-model spread:</strong> max model TX90p − min model TX90p.</div>
+                          <div><strong>Inter-model spread:</strong> max model TX90p − min model TX90p.</div>
                           <div><strong>Reliability:</strong> 1 − min(1, spread / global spread p95).</div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-rose-100 bg-rose-50 p-3">
+                    <div className="rounded-xl border border-teal-100 bg-teal-50 p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wide text-rose-500">
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-teal-500">
                             Tropical cyclone hazard
                           </div>
-                          <div className="mt-1 text-sm font-bold text-rose-950">
+                          <div className="mt-1 text-sm font-bold text-teal-950">
                             EMPIRIC_TC · 0.5° grid
                           </div>
-                          <div className="mt-1 text-[10px] font-medium text-rose-700">
+                          <div className="mt-1 text-[10px] font-medium text-teal-700">
                             Scope: {formatMetadataValue(tropicalCycloneHazardMetadata?.display_scope, tropicalCycloneScopeLabel)}
                           </div>
                         </div>
 
                         {hasTropicalCycloneHazardLayer && (
-                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-rose-700">
+                          <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-teal-700">
                             loaded
                           </div>
                         )}
@@ -3075,7 +3113,7 @@ const MapCanvas = ({
                         type="button"
                         onClick={() => handleRunTropicalCycloneHazardLayer("selected")}
                         disabled={isTropicalCycloneHazardLoading}
-                        className="mt-3 w-full rounded-lg bg-rose-700 px-3 py-2 text-[10px] font-bold text-white shadow-sm transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:bg-rose-200"
+                        className="mt-3 w-full rounded-lg bg-teal-700 px-3 py-2 text-[10px] font-bold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-teal-200"
                       >
                         {isTropicalCycloneHazardLoading
                           ? "Loading TC hazard..."
@@ -3088,25 +3126,25 @@ const MapCanvas = ({
                         type="button"
                         onClick={() => handleRunTropicalCycloneHazardLayer("pict")}
                         disabled={isTropicalCycloneHazardLoading}
-                        className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-[10px] font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mt-2 w-full rounded-lg border border-teal-200 bg-white px-3 py-2 text-[10px] font-bold text-teal-700 shadow-sm transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Show all-PICT TC hazard
                       </button>
 
                       {!selectedArea && (
-                        <p className="mt-2 text-[10px] leading-snug text-rose-700">
+                        <p className="mt-2 text-[10px] leading-snug text-teal-700">
                           No admin area selected: this will show the full selected-country TC layer.
                         </p>
                       )}
 
                       {tropicalCycloneHazardError && (
-                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-rose-700">
+                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-teal-700">
                           {tropicalCycloneHazardError}
                         </p>
                       )}
 
                       {tropicalCycloneHazardMetadata && (
-                        <div className="mt-2 rounded-lg bg-white/85 p-2 text-[10px] leading-snug text-rose-800">
+                        <div className="mt-2 rounded-lg bg-white/85 p-2 text-[10px] leading-snug text-teal-800">
                           <span className="font-bold">Current:</span>{" "}
                           {formatMetadataValue(
                             tropicalCycloneHazardMetadata.admin_name,
@@ -3132,32 +3170,32 @@ const MapCanvas = ({
                       )}
 
                       {tropicalCycloneHazardSummary && (
-                        <div className="mt-2 rounded-lg bg-white/90 p-2 text-[10px] leading-snug text-rose-900">
-                          <div className="font-bold uppercase tracking-wide text-rose-600">
+                        <div className="mt-2 rounded-lg bg-white/90 p-2 text-[10px] leading-snug text-teal-900">
+                          <div className="font-bold uppercase tracking-wide text-teal-600">
                             TC summary
                           </div>
 
                           <div className="mt-2 grid grid-cols-2 gap-1">
-                            <div className="rounded-md bg-rose-50 p-1.5">
-                              <div className="text-[9px] font-bold uppercase text-rose-400">
+                            <div className="rounded-md bg-teal-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-teal-400">
                                 Mean hazard
                               </div>
-                              <div className="text-sm font-bold text-rose-950">
+                              <div className="text-sm font-bold text-teal-950">
                                 {formatHazardValue(tropicalCycloneHazardSummary.meanHazard)}
                               </div>
                             </div>
 
-                            <div className="rounded-md bg-rose-50 p-1.5">
-                              <div className="text-[9px] font-bold uppercase text-rose-400">
+                            <div className="rounded-md bg-teal-50 p-1.5">
+                              <div className="text-[9px] font-bold uppercase text-teal-400">
                                 Max hazard
                               </div>
-                              <div className="text-sm font-bold text-rose-950">
+                              <div className="text-sm font-bold text-teal-950">
                                 {formatHazardValue(tropicalCycloneHazardSummary.maxHazard)}
                               </div>
                             </div>
                           </div>
 
-                          <div className="mt-2 space-y-1 rounded-md bg-rose-50 p-1.5 text-[9px] font-semibold text-rose-800">
+                          <div className="mt-2 space-y-1 rounded-md bg-teal-50 p-1.5 text-[9px] font-semibold text-teal-800">
                             <div className="flex justify-between gap-2">
                               <span>High/very-high cells</span>
                               <span>{formatCompactNumber(tropicalCycloneHazardSummary.highHazardCellCount)}</span>
@@ -3175,17 +3213,17 @@ const MapCanvas = ({
                       )}
 
                       <div className="mt-3 rounded-lg bg-white/85 p-2">
-                        <div className="mb-1 flex justify-between text-[9px] font-bold uppercase tracking-wide text-rose-700">
+                        <div className="mb-1 flex justify-between text-[9px] font-bold uppercase tracking-wide text-teal-700">
                           <span>Low</span>
                           <span>TC hazard value</span>
                           <span>High</span>
                         </div>
                         <div className="grid grid-cols-6 overflow-hidden rounded-md border border-white/80">
-                          {["#fff7ed", "#fed7aa", "#fdba74", "#fb923c", "#c2410c", "#7f1d1d"].map((color) => (
+                          {["#fff7ed", "#fed7aa", "#fdba74", "#fb923c", "#c2410c", "#78350F"].map((color) => (
                             <div key={color} className="h-4" style={{ backgroundColor: color }} />
                           ))}
                         </div>
-                        <p className="mt-2 text-[10px] leading-snug text-rose-700">
+                        <p className="mt-2 text-[10px] leading-snug text-teal-700">
                           Color shows the uploaded EMPIRIC_TC tropical-cyclone hazard value on native 0.5° cells. Exact return-period/unit label is pending corrected source export.
                         </p>
                       </div>
@@ -3322,7 +3360,7 @@ const MapCanvas = ({
                       )}
 
                       {selectedArea && assetLookupError && (
-                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-red-600">
+                        <p className="mt-2 rounded-lg bg-white/80 p-2 text-[10px] leading-snug text-[#174A73]">
                           {assetLookupError}
                         </p>
                       )}
@@ -3504,6 +3542,28 @@ const MapCanvas = ({
                           className="h-4 w-4 cursor-pointer accent-sky-600"
                         />
                       </label>
+
+                        {showInfrastructureAssets && (
+                          <div className="mt-2 rounded-xl border border-sky-100 bg-white/90 p-2.5">
+                            <div className="text-[9px] font-black uppercase tracking-wide text-sky-700">
+                              Point colors
+                            </div>
+                            <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1">
+                              {ASSET_LEGEND_ITEMS.map((item) => (
+                                <div
+                                  key={item.label}
+                                  className="flex items-center gap-1.5 text-[9px] font-semibold text-slate-600"
+                                >
+                                  <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-white shadow-sm"
+                                    style={{ backgroundColor: item.color }}
+                                  />
+                                  <span>{item.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                     </div>
 
                     {/* Dynamic Datasets section */}
@@ -3598,7 +3658,7 @@ const MapCanvas = ({
                           <div
                             className="h-2 w-full rounded-full"
                             style={{
-                              background: "linear-gradient(to right, #fee2e2, #fbbf24, #22c55e)",
+                              background: "linear-gradient(to right, #E8F1F9, #fbbf24, #22c55e)",
                             }}
                           />
                           <div className="mt-1 flex justify-between text-[10px] font-semibold text-neutral-500">

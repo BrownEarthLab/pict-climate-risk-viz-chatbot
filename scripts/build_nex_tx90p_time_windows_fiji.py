@@ -40,21 +40,21 @@ DEFAULT_CATALOG_PATH = Path("backend/cache/climate_indices/tasmax/fji/tx90p_nex_
 
 # Value-by-alpha palette: hue shows risk/value, opacity shows reliability.
 BIVARIATE_COLOR_MATRIX_3X3: dict[str, dict[str, str]] = {
-    "low": {"low": "#2c7bb6", "medium": "#2c7bb6", "high": "#2c7bb6"},
-    "medium": {"low": "#b7a891", "medium": "#b7a891", "high": "#b7a891"},
-    "high": {"low": "#f28e2b", "medium": "#f28e2b", "high": "#f28e2b"},
+    "low": {"low": "#0067B1", "medium": "#0067B1", "high": "#0067B1"},
+    "medium": {"low": "#B89A75", "medium": "#B89A75", "high": "#B89A75"},
+    "high": {"low": "#F47A00", "medium": "#F47A00", "high": "#F47A00"},
 }
 
 RELIABILITY_ALPHA = {
-    "low": 0.38,
-    "medium": 0.64,
-    "high": 0.90,
+    "low": 0.55,
+    "medium": 0.75,
+    "high": 0.95,
 }
 
 RISK_CLASS_BINS = {
-    "low": "TX90p < 33%",
-    "medium": "33% <= TX90p < 66%",
-    "high": "TX90p >= 66%",
+    "low": "TX90p < 35%",
+    "medium": "35% <= TX90p < 50%",
+    "high": "TX90p >= 50%",
 }
 
 RELIABILITY_CLASS_BINS = {
@@ -82,9 +82,9 @@ def safe_float(value: Any) -> float | None:
 
 
 def risk_class_from_value(value: float) -> str:
-    if value < 33.0:
+    if value < 35.0:
         return "low"
-    if value < 66.0:
+    if value < 50.0:
         return "medium"
     return "high"
 

@@ -112,7 +112,7 @@ const AppLayout = ({
               </h2>
               <button
                 onClick={() => onDeleteConversation(activeConversation.id)}
-                className="text-xs text-neutral-400 hover:text-red-500"
+                className="text-xs text-neutral-400 hover:text-[#174A73]"
               >
                 Delete
               </button>

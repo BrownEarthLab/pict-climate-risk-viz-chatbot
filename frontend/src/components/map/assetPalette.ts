@@ -1,0 +1,46 @@
+export const ASSET_CATEGORY_COLORS = {
+  healthcare: "#0F766E",
+  education: "#2563EB",
+  port: "#0891B2",
+  power: "#7C3AED",
+  critical: "#C58A1C",
+  other: "#475569",
+} as const;
+
+export const ASSET_COLOR_EXPRESSION: unknown[] = [
+  "match",
+  ["get", "asset_type"],
+  "hospital",
+  ASSET_CATEGORY_COLORS.healthcare,
+  "clinic",
+  ASSET_CATEGORY_COLORS.healthcare,
+  "health_centre",
+  ASSET_CATEGORY_COLORS.healthcare,
+  "health_center",
+  ASSET_CATEGORY_COLORS.healthcare,
+  "school",
+  ASSET_CATEGORY_COLORS.education,
+  "college",
+  ASSET_CATEGORY_COLORS.education,
+  "university",
+  ASSET_CATEGORY_COLORS.education,
+  "kindergarten",
+  ASSET_CATEGORY_COLORS.education,
+  "port",
+  ASSET_CATEGORY_COLORS.port,
+  "ferry_terminal",
+  ASSET_CATEGORY_COLORS.port,
+  "power_substation",
+  ASSET_CATEGORY_COLORS.power,
+  "critical_facility",
+  ASSET_CATEGORY_COLORS.critical,
+  ASSET_CATEGORY_COLORS.other,
+];
+
+export const ASSET_LEGEND_ITEMS = [
+  { label: "Healthcare", color: ASSET_CATEGORY_COLORS.healthcare },
+  { label: "Education", color: ASSET_CATEGORY_COLORS.education },
+  { label: "Ports / ferry", color: ASSET_CATEGORY_COLORS.port },
+  { label: "Power substations", color: ASSET_CATEGORY_COLORS.power },
+  { label: "Critical facilities", color: ASSET_CATEGORY_COLORS.critical },
+] as const;

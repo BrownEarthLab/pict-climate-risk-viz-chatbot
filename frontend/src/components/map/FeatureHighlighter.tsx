@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 
+import { ASSET_COLOR_EXPRESSION } from "./assetPalette";
 type HeatDisplayMode = "combined" | "risk" | "uncertainty";
 
 interface FeatureHighlighterProps {
@@ -196,7 +197,7 @@ function getTooltipHtml(properties: Record<string, unknown>): string {
           <div><strong>Ensemble mean TX90p:</strong> ${formatPercentDays(
             properties.ensemble_mean_tx90p ?? properties.tx90p ?? properties.value
           )}</div>
-          <div><strong>Inter-inter-inter-inter-model spread:</strong> ${formatNumber(
+          <div><strong>Inter-model spread:</strong> ${formatNumber(
             properties.uncertainty_spread
           )} percentage points</div>
           <div><strong>Reliability score:</strong> ${formatNumber(
@@ -556,7 +557,7 @@ const FeatureHighlighter = ({
           20,
           "#f59e0b",
           24,
-          "#ef4444",
+          "#F47A00",
           27,
           "#d946ef",
         ],
@@ -580,28 +581,26 @@ const FeatureHighlighter = ({
       paint: {
         "fill-color": [
           "match",
-          ["get", "bivariate_class"],
-          "low_risk_low_reliability",
-          "#3b2c66",
-          "low_risk_medium_reliability",
-          "#6d55b3",
-          "low_risk_high_reliability",
-          "#a78bfa",
-          "medium_risk_low_reliability",
-          "#6b3f35",
-          "medium_risk_medium_reliability",
-          "#a66a43",
-          "medium_risk_high_reliability",
-          "#f1b866",
-          "high_risk_low_reliability",
-          "#8a2d13",
-          "high_risk_medium_reliability",
-          "#c2410c",
-          "high_risk_high_reliability",
-          "#ff7a00",
-          "#a66a43",
+          ["get", "risk_class"],
+          "low",
+          "#0067B1",
+          "medium",
+          "#B89A75",
+          "high",
+          "#F47A00",
+          "#B89A75",
         ],
-        "fill-opacity": 0.82,
+        "fill-opacity": [
+          "match",
+          ["get", "reliability_class"],
+          "low",
+          0.55,
+          "medium",
+          0.75,
+          "high",
+          0.95,
+          0.75,
+        ],
       },
     });
 
@@ -664,7 +663,7 @@ const FeatureHighlighter = ({
           0.4,
           "#c2410c",
           0.8,
-          "#7f1d1d",
+          "#78350F",
         ],
         "fill-opacity": 0.72,
       },
@@ -931,7 +930,7 @@ const FeatureHighlighter = ({
               0.6,
             ],
           ],
-          "#ef4444",
+          "#F47A00",
           [
             "all",
             [">=", ["coalesce", ["get", "exposure_probability"], 0], 0.5],
@@ -1026,31 +1025,7 @@ const FeatureHighlighter = ({
           5.4,
           3.8,
         ],
-        "circle-color": [
-          "match",
-          ["get", "asset_type"],
-          "hospital",
-          "#ef4444",
-          "clinic",
-          "#ef4444",
-          "school",
-          "#2563eb",
-          "college",
-          "#2563eb",
-          "university",
-          "#2563eb",
-          "kindergarten",
-          "#2563eb",
-          "port",
-          "#0891b2",
-          "ferry_terminal",
-          "#0891b2",
-          "power_substation",
-          "#a855f7",
-          "critical_facility",
-          "#f97316",
-          "#111827",
-        ],
+        "circle-color": ASSET_COLOR_EXPRESSION as any,
         "circle-opacity": 0.9,
         "circle-stroke-color": [
           "case",
