@@ -122,3 +122,4 @@ data/cache/
 >>>>>>> 08473d9606b4f6cdbe247874f9413dd2d7dc0926
 # Local patch backups
 *.before_oct15_ui_feedback.bak
+backend/.env

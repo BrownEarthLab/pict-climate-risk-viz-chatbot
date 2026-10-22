@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { fromArrayBuffer } from "geotiff";
 import * as h3 from "h3-js";
-import { interpretResults } from "./interpretResults.js";
+import { interpretChat, interpretResults } from "./interpretResults.js";
 import {
   loadClimateCatalog,
   listClimateVariables,
@@ -4439,6 +4439,38 @@ app.post("/api/interpret-results", async (req, res) => {
     });
   }
 });
+
+app.post("/api/chat/interpret", async (req, res) => {
+  try {
+    const {
+      message,
+      history = [],
+      analysis_context = null,
+    } = req.body || {};
+
+    if (!String(message || "").trim()) {
+      return res.status(400).json({
+        error: "message is required",
+      });
+    }
+
+    const result = await interpretChat({
+      message,
+      history,
+      analysisContext: analysis_context,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    console.error("Interpretation chat failed:", error);
+
+    return res.status(500).json({
+      error: "Interpretation chat failed",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 
 
 app.post("/api/admin-assets", async (req, res) => {

@@ -1,6 +1,7 @@
 import MapCanvas from "../map/MapCanvas";
 import Sidebar from "../Sidebar";
 import ConversationView from "../chat/ConversationView";
+import InterpretationChat from "../chat/InterpretationChat";
 import { useSpatialQuery } from "../../hooks/useSpatialQuery";
 
 // Chatbot UI is intentionally hidden for the current map-only prototype.
@@ -89,6 +90,11 @@ const AppLayout = ({
           isQuerying={isQuerying}
         />
       </main>
+
+      <InterpretationChat
+        queryMetadata={queryMetadata ? { ...queryMetadata } : null}
+        highlightedFeatures={highlightedFeatures}
+      />
 
       <aside
         style={{ display: CHATBOT_ENABLED ? undefined : "none" }}

@@ -7,6 +7,12 @@ import { useMapbox } from "../../hooks/useMapbox";
 import FeatureHighlighter from "./FeatureHighlighter";
 import SpatialQueryPanel from "./SpatialQueryPanel";
 import MapControls from "./MapControls";
+import {
+  clearPublishedAnalysisContext,
+  publishAnalysisContext,
+  summarizeClimateAnalysis,
+  summarizeTropicalCycloneAnalysis,
+} from "../chat/analysisContext";
 import { loadClimateCutoffs, reclassifyClimateFeatures, saveClimateCutoffs, type ClimateCutoffs } from "./climateValueByAlpha";
 import { ASSET_LEGEND_ITEMS } from "./assetPalette";
 import ClimateValueByAlphaControls from "./ClimateValueByAlphaControls";
@@ -1469,6 +1475,7 @@ const MapCanvas = ({
 
     didInitializeHeatLayerRef.current = true;
     setActiveLayer("manual_heat_risk" as never);
+    clearPublishedAnalysisContext(); // Gemini context: daily heat
     setShowGlobalDataset(false);
   }, [setActiveLayer, setShowGlobalDataset]);
 
@@ -1663,6 +1670,7 @@ const MapCanvas = ({
         : manualHeatThresholdRef.current;
 
       setActiveLayer("manual_heat_risk" as never);
+    clearPublishedAnalysisContext(); // Gemini context: daily heat
       setShowGlobalDataset(false);
       setClimateIndexFeatures([]);
       setClimateLayerMetadata(null);
@@ -1721,6 +1729,7 @@ const MapCanvas = ({
     popupRef.current = null;
 
     setActiveLayer("manual_heat_risk" as never);
+    clearPublishedAnalysisContext(); // Gemini context: daily heat
     setShowGlobalDataset(false);
     setClimateIndexFeatures([]);
     setClimateLayerMetadata(null);
@@ -1771,6 +1780,7 @@ const MapCanvas = ({
     setTropicalCycloneHazardMetadata(null);
     setTropicalCycloneHazardError(null);
     setActiveLayer("manual_heat_risk" as never);
+    clearPublishedAnalysisContext(); // Gemini context: daily heat
     setShowGlobalDataset(false);
     clearSpatialQuery();
 
@@ -1797,7 +1807,30 @@ const MapCanvas = ({
         },
       }));
 
-      setClimateIndexFeatures(reclassifyClimateFeatures(features, climateCutoffs));
+      const featuresForInterpretation = reclassifyClimateFeatures(
+        features,
+        climateCutoffs,
+      );
+      setClimateIndexFeatures(featuresForInterpretation);
+      publishAnalysisContext(
+        summarizeClimateAnalysis(featuresForInterpretation, {
+          country_id: selectedCountryId,
+          country_name: selectedCountry?.country_name ?? null,
+          admin_level: selectedAdminLevel,
+          admin_area: selectedArea
+            ? {
+                admin_id: selectedArea.adminId,
+                admin_name: selectedArea.adminName,
+                country_name: selectedArea.countryName,
+              }
+            : null,
+          scenario: climateScenario,
+          time_window: climateTimeWindow,
+          year: climateYear,
+          current_visualization_cutoffs: climateCutoffs,
+          api_metadata: layer.metadata ?? null,
+        }),
+      );
       setClimateLayerMetadata({
         ...(layer.metadata || {}),
         ...(layer.api_metadata || {}),
@@ -1838,6 +1871,7 @@ const MapCanvas = ({
     setClimateLayerMetadata(null);
     setClimateLayerError(null);
     setActiveLayer("manual_heat_risk" as never);
+    clearPublishedAnalysisContext(); // Gemini context: daily heat
     setShowGlobalDataset(false);
     clearSpatialQuery();
 
@@ -1865,7 +1899,23 @@ const MapCanvas = ({
         },
       }));
 
-      setTropicalCycloneHazardFeatures(features);
+      const tcFeaturesForInterpretation = features;
+      setTropicalCycloneHazardFeatures(tcFeaturesForInterpretation);
+      publishAnalysisContext(
+        summarizeTropicalCycloneAnalysis(tcFeaturesForInterpretation, {
+          country_id: selectedCountryId,
+          country_name: selectedCountry?.country_name ?? null,
+          admin_level: selectedAdminLevel,
+          admin_area: selectedArea
+            ? {
+                admin_id: selectedArea.adminId,
+                admin_name: selectedArea.adminName,
+                country_name: selectedArea.countryName,
+              }
+            : null,
+          api_metadata: null,
+        }),
+      );
       setTropicalCycloneHazardMetadata({
         ...(layer.metadata || {}),
         ...(layer.api_metadata || {}),
@@ -2376,6 +2426,7 @@ const MapCanvas = ({
     setTropicalCycloneHazardMetadata(null);
     setTropicalCycloneHazardError(null);
     setActiveLayer("manual_heat_risk" as never);
+    clearPublishedAnalysisContext(); // Gemini context: daily heat
     setShowGlobalDataset(false);
     clearSpatialQuery();
     onDrawGeometry(null);
